@@ -6,6 +6,7 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.res.Configuration
+import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
@@ -22,6 +23,7 @@ import java.io.FileOutputStream
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "pip_service"
     private val MEDIA_STORE_CHANNEL = "media_store"
+    private val THUMBNAIL_CHANNEL = "video_thumbnail"
     private var methodChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -74,6 +76,31 @@ class MainActivity: FlutterActivity() {
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
+            THUMBNAIL_CHANNEL
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "thumbnailFile") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+
+            val videoPath = call.argument<String>("video")
+            val maxWidth = (call.argument<Number>("maxWidth") ?: 0).toInt()
+            val quality = (call.argument<Number>("quality") ?: 50).toInt()
+            if (videoPath.isNullOrBlank()) {
+                result.error("INVALID_PATH", "Video file path is required.", null)
+                return@setMethodCallHandler
+            }
+
+            try {
+                val path = generateThumbnail(videoPath, maxWidth, quality)
+                result.success(path)
+            } catch (e: Exception) {
+                result.error("THUMBNAIL_FAILED", e.message ?: "Unable to generate thumbnail.", null)
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
             MEDIA_STORE_CHANNEL
         ).setMethodCallHandler { call, result ->
             if (call.method != "saveAudio") {
@@ -94,6 +121,40 @@ class MainActivity: FlutterActivity() {
                 e.printStackTrace()
                 result.error("SAVE_AUDIO_FAILED", e.message ?: "Unable to save audio.", null)
             }
+        }
+    }
+
+    // Extracts a poster frame and writes it as PNG into the app cache dir.
+    private fun generateThumbnail(videoPath: String, maxWidth: Int, quality: Int): String {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(videoPath)
+            var bitmap = retriever.getFrameAtTime(
+                0,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+            ) ?: throw IllegalStateException("No frame could be extracted.")
+
+            if (maxWidth in 1 until bitmap.width) {
+                val scaledHeight = bitmap.height * maxWidth / bitmap.width
+                bitmap = android.graphics.Bitmap.createScaledBitmap(
+                    bitmap, maxWidth, scaledHeight, true
+                )
+            }
+
+            val cacheDir = cacheDir.resolve("video_thumbnails").apply { mkdirs() }
+            val target = File.createTempFile("thumb_", ".png", cacheDir)
+            target.outputStream().use { out ->
+                @Suppress("DEPRECATION")
+                bitmap.compress(
+                    android.graphics.Bitmap.CompressFormat.PNG,
+                    quality.coerceIn(0, 100),
+                    out
+                )
+            }
+            bitmap.recycle()
+            return target.absolutePath
+        } finally {
+            retriever.release()
         }
     }
 

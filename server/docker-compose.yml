@@ -12,10 +12,12 @@ services:
       API_URL: "${API_ORIGIN:-https://api.ekalliptus.com}/"
       API_PORT: "9000"
       COOKIE_PATH: "/cookies.json"
-      # No auth so the app's no-key requests work
-      # (protect via firewall / reverse proxy instead if exposed publicly)
+      # API key auth for public exposure; keys.json mounted below
+      API_AUTH_REQUIRED: "1"
+      API_KEY_FILE: "/keys.json"
     volumes:
       # cookie_sync.py writes here; Cobalt reads it for login-gated platforms
       - /opt/anrsaver/cookies.json:/cookies.json:ro
+      - /opt/anrsaver/cobalt/keys.json:/keys.json:ro
     labels:
       - com.centurylinklabs.watchtower.scope=cobalt

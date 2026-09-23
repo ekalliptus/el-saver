@@ -259,3 +259,7 @@ lib/config/*.json
 
 # Local agent / IDE
 .zcode/
+
+# Mimosa scanner state
+.mimosa/
+android/build/

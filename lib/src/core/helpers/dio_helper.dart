@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../container_injector.dart';
 import 'media_file_utils.dart';
@@ -20,7 +21,7 @@ class DioHelper {
         "Accept": "application/json",
       },
     );
-    dio.interceptors.add(sl<LogInterceptor>());
+    if (kDebugMode) dio.interceptors.add(sl<LogInterceptor>());
     dio.interceptors.add(sl<AppInterceptors>());
   }
 
@@ -39,7 +40,7 @@ class DioHelper {
         receiveTimeout: const Duration(seconds: 30),
         headers: customHeaders ?? dio.options.headers,
       );
-      tempDio.interceptors.add(sl<LogInterceptor>());
+      if (kDebugMode) tempDio.interceptors.add(sl<LogInterceptor>());
       return await tempDio.get(path, queryParameters: queryParams);
     }
     return await dio.get(path, queryParameters: queryParams);
@@ -63,7 +64,7 @@ class DioHelper {
         receiveTimeout: receiveTimeout ?? const Duration(seconds: 30),
         headers: customHeaders ?? {"Content-Type": "application/json"},
       );
-      tempDio.interceptors.add(sl<LogInterceptor>());
+      if (kDebugMode) tempDio.interceptors.add(sl<LogInterceptor>());
       return await tempDio.post(
         path,
         data: data,

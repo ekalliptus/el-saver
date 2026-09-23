@@ -18,8 +18,11 @@ Usage:
 Requires: google-auth, requests  (pip install -r scripts/requirements.txt)
 """
 import argparse
+import ipaddress
 import os
+import socket
 import sys
+from urllib.parse import urlparse
 
 import requests
 from google.oauth2 import service_account
@@ -27,7 +30,20 @@ from google.auth.transport.requests import Request
 
 PROJECT_ID = "anrsaver"
 SCOPES = ["https://www.googleapis.com/auth/firebase.remoteconfig"]
-BASE = f"https://firebaseremoteconfig.googleapis.com/v1/projects/{PROJECT_ID}/remoteConfig"
+BASE = "https://firebaseremoteconfig.googleapis.com/v1/projects/anrsaver/remoteConfig"
+ALLOWED_HOST = "firebaseremoteconfig.googleapis.com"
+
+
+def _assert_safe_url(url: str):
+    """Fixed-host HTTPS only; resolve DNS and block private/loopback/link-local
+    targets so the request can never be pointed at internal services."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != ALLOWED_HOST:
+        raise SystemExit(f"blocked non-{ALLOWED_HOST} URL: {url}")
+    for family, _, _, _, sockaddr in socket.getaddrinfo(parsed.hostname, 443):
+        ip = ipaddress.ip_address(sockaddr[0])
+        if not ip.is_global:
+            raise SystemExit(f"blocked non-public address for {parsed.hostname}: {ip}")
 
 
 def _token(sa_path: str) -> str:
@@ -59,8 +75,11 @@ def main() -> int:
     token = _token(args.sa)
     headers = {"Authorization": f"Bearer {token}"}
 
+    _assert_safe_url(BASE)
+
     # GET current template + ETag
-    r = requests.get(BASE, headers={**headers, "Accept-Encoding": "gzip"}, timeout=30)
+    r = requests.get(BASE, headers={**headers, "Accept-Encoding": "gzip"},
+                     timeout=30, allow_redirects=False)
     r.raise_for_status()
     template = r.json()
     etag = r.headers.get("ETag", "*")
@@ -81,7 +100,7 @@ def main() -> int:
         BASE,
         headers={**headers, "Content-Type": "application/json; UTF-8",
                  "If-Match": etag},
-        json=template, timeout=30,
+        json=template, timeout=30, allow_redirects=False,
     )
     put.raise_for_status()
     print(f"Remote Config updated: {args.version_name} (code {args.version_code})")

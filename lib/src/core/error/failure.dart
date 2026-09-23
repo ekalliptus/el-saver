@@ -28,8 +28,8 @@ class AuthRequiredFailure extends Failure {
   const AuthRequiredFailure({
     required this.platform,
     required this.sourceCode,
-    required String message,
-  }) : super(message: message);
+    required super.message,
+  });
 
   @override
   List<Object?> get props => [message, platform, sourceCode];

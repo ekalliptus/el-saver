@@ -20,16 +20,20 @@ class ApiConfig {
   // The heavy /download (server-side merge) still uses its own long timeout.
   static const int ytdlpInfoTimeoutSeconds = 30;
 
-  // Cobalt API key (optional - only needed if instance requires auth)
-  static const String? cobaltApiKey = null;
+  // Cobalt API key (UUID key registered in the instance's keys.json)
+  static const String cobaltApiKey =
+      "5f22dee6-3789-438b-bb57-9349e9ec0ceb";
+
+  // Secret shared with the backend services (FastAPI X-Api-Key)
+  static const String backendApiKey = "S3B1XAbtnEvVm34MvRHM4kokQVW8dre0";
 
   // Cookie sync server behind the api.ekalliptus.com TLS reverse proxy.
   static const String cookieSyncUrl = "https://api.ekalliptus.com/cookie-sync";
-  static const String cookieSyncApiKey = "wrIShnwgKDOvpNs7jCj30SweholNPjAo";
+  static const String cookieSyncApiKey = backendApiKey;
 
   // yt-dlp API behind the api.ekalliptus.com TLS reverse proxy.
   static const String ytdlpApiUrl = "https://api.ekalliptus.com/ytdlp";
-  static const String ytdlpApiKey = "wrIShnwgKDOvpNs7jCj30SweholNPjAo";
+  static const String ytdlpApiKey = backendApiKey;
 
   // TikWM fallback for TikTok (free, no auth)
   static const bool useTikwmFallback = true;

@@ -27,6 +27,7 @@ Failure _handleError(DioException dioError) {
     case DioExceptionType.connectionTimeout:
     case DioExceptionType.sendTimeout:
     case DioExceptionType.receiveTimeout:
+    case DioExceptionType.transformTimeout:
       return const ConnectTimeOutFailure();
     case DioExceptionType.badResponse:
       return _handleResponseError(dioError.response);

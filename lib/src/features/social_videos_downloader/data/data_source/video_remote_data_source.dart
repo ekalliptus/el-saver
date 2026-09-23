@@ -176,9 +176,7 @@ class TiktokVideoRemoteDataSource implements VideoBaseRemoteDataSource {
       "Content-Type": "application/json",
     };
 
-    if (ApiConfig.cobaltApiKey != null) {
-      headers["Authorization"] = "Api-Key ${ApiConfig.cobaltApiKey}";
-    }
+    headers["Authorization"] = "Api-Key ${ApiConfig.cobaltApiKey}";
 
     // Single request: Cobalt auto-selects the best stream up to videoQuality.
     // (Looping every lower quality per instance was the main fetch slowdown.)

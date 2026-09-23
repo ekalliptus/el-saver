@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'core/api/interceptors.dart';
 import 'core/helpers/dio_helper.dart';
@@ -13,16 +14,20 @@ void initCore() {
   // Dio
   sl.registerLazySingleton<Dio>(() => Dio());
   sl.registerLazySingleton<AppInterceptors>(() => AppInterceptors());
-  sl.registerLazySingleton<LogInterceptor>(
-    () => LogInterceptor(
-      error: true,
-      request: true,
-      requestBody: true,
-      requestHeader: true,
-      responseBody: true,
-      responseHeader: true,
-    ),
-  );
+  // LogInterceptor dumps request/response headers — which carry the API key
+  // and synced cookies — so it must never run in release builds.
+  if (kDebugMode) {
+    sl.registerLazySingleton<LogInterceptor>(
+      () => LogInterceptor(
+        error: true,
+        request: true,
+        requestBody: true,
+        requestHeader: true,
+        responseBody: true,
+        responseHeader: true,
+      ),
+    );
+  }
 
   // Dio Factory
   sl.registerLazySingleton<DioHelper>(

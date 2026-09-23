@@ -1,0 +1,7 @@
+[Unit]
+Description=EL-Saver downloads cleanup
+
+[Service]
+Type=oneshot
+User=anrsaver
+ExecStart=/opt/anrsaver/cleanup-downloads.sh

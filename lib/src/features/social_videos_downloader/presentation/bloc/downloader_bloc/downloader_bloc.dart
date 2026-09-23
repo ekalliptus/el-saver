@@ -7,7 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:el_saver/src/features/social_videos_downloader/domain/entities/video.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
+import '../../../../../core/helpers/video_thumbnail.dart';
 
 import '../../../../../core/error/failure.dart';
 import '../../../../../core/helpers/dir_helper.dart';
@@ -258,7 +258,6 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
       final thumb = await VideoThumbnail.thumbnailFile(
         video: videoPath,
         thumbnailPath: (await getTemporaryDirectory()).path,
-        imageFormat: ImageFormat.PNG,
         quality: 50,
         maxWidth: 200,
       );
@@ -355,7 +354,6 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
           thumbnailPath = await VideoThumbnail.thumbnailFile(
             video: mediaPath,
             thumbnailPath: (await getTemporaryDirectory()).path,
-            imageFormat: ImageFormat.PNG,
             quality: 30,
           );
         } else if (_isImagePath(mediaPath)) {
