@@ -271,61 +271,6 @@ class AppStrings {
     }
   }
 
-  // Donation Dialog
-  static String get supportDeveloper {
-    switch (_currentLanguage) {
-      case SupportedLanguage.indonesian:
-        return "Dukung Developer";
-      case SupportedLanguage.english:
-        return "Support Developer";
-    }
-  }
-
-  static String get helpKeepAppFree {
-    switch (_currentLanguage) {
-      case SupportedLanguage.indonesian:
-        return "Bantu menjaga aplikasi ini gratis & terbaru";
-      case SupportedLanguage.english:
-        return "Help keep this app free & updated";
-    }
-  }
-
-  static String get scanQrisCode {
-    switch (_currentLanguage) {
-      case SupportedLanguage.indonesian:
-        return "Pindai Kode QRIS";
-      case SupportedLanguage.english:
-        return "Scan QRIS Code";
-    }
-  }
-
-  static String get useIndonesianEWallet {
-    switch (_currentLanguage) {
-      case SupportedLanguage.indonesian:
-        return "Gunakan aplikasi e-wallet atau mobile banking Indonesia";
-      case SupportedLanguage.english:
-        return "Use any Indonesian e-wallet or mobile banking app";
-    }
-  }
-
-  static String get qrisImageNotFound {
-    switch (_currentLanguage) {
-      case SupportedLanguage.indonesian:
-        return "Gambar QRIS tidak ditemukan";
-      case SupportedLanguage.english:
-        return "QRIS image not found";
-    }
-  }
-
-  static String get thankYouSupport {
-    switch (_currentLanguage) {
-      case SupportedLanguage.indonesian:
-        return "❤️ Terima kasih atas dukungannya! ❤️";
-      case SupportedLanguage.english:
-        return "❤️ Thank you for your support! ❤️";
-    }
-  }
-
   // Helper method to get localized platform name
   static String getPlatformName(String platform) {
     if (_currentLanguage == SupportedLanguage.indonesian) {

@@ -2,19 +2,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:el_saver/src/core/media_query.dart';
-import 'package:el_saver/src/core/utils/app_strings.dart';
 
 import '../../../../../core/utils/app_colors.dart';
 import 'animated_toggle_button.dart';
 
 class DownloaderBottomAppBar extends StatelessWidget {
-  final VoidCallback? onSharePressed;
   final VoidCallback? onAccountsPressed;
   final VoidCallback? onStatusPressed;
 
   const DownloaderBottomAppBar({
     super.key,
-    this.onSharePressed,
     this.onAccountsPressed,
     this.onStatusPressed,
   });
@@ -74,13 +71,6 @@ class DownloaderBottomAppBar extends StatelessWidget {
                 onPressed: onStatusPressed ?? () {},
                 isDark: isDark,
                 tooltip: 'Status WhatsApp',
-                isSecondary: true,
-              ),
-              _BuildActionButton(
-                icon: Icons.card_giftcard,
-                onPressed: onSharePressed ?? () {},
-                isDark: isDark,
-                tooltip: AppStrings.supportDeveloper,
                 isSecondary: true,
               ),
               const Flexible(

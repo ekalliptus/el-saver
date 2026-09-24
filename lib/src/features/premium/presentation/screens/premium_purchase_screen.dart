@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:el_saver/src/core/common_widgets/toast.dart';
 import 'package:el_saver/src/core/services/premium_service.dart';
@@ -227,7 +228,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Row(
                   children: [
@@ -244,19 +245,37 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                if (order.qris.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: QrImageView(
+                      data: order.qris,
+                      size: 230,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Scan dengan GoPay / DANA / OVO / m-banking',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ] else ...[
+                  Text(order.paymentInfo),
+                ],
+                const SizedBox(height: 12),
+                Text(
+                  'Total: ${formatRupiah(order.price)}'
+                  '${order.grossAmount.isNotEmpty && !order.grossAmount.endsWith('.00') ? '  (${order.grossAmount})' : ''}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 18),
+                ),
+                const SizedBox(height: 4),
                 Text('Nomor pesanan: ${order.orderId}',
                     style: const TextStyle(fontSize: 12)),
-                const SizedBox(height: 4),
-                Text('Total: ${formatRupiah(order.price)}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 18)),
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text('Cara bayar:',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text(order.paymentInfo),
               ],
             ),
           ),
@@ -273,8 +292,8 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Menunggu konfirmasi pembayaran. Lisensi akan aktif otomatis '
-                'begitu pembayaran terverifikasi.',
+                'Menunggu pembayaran. Lisensi akan aktif otomatis begitu '
+                'pembayaran terdeteksi.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

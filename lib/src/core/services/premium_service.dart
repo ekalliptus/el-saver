@@ -191,12 +191,14 @@ class PremiumPackage {
       );
 }
 
-/// A pending purchase order with payment instructions.
+/// A pending purchase order with its dynamic QRIS payload.
 class OrderInfo {
   final String orderId;
   final String packageId;
   final String packageName;
   final int price;
+  final String grossAmount;
+  final String qris;
   final String paymentInfo;
 
   const OrderInfo({
@@ -204,6 +206,8 @@ class OrderInfo {
     required this.packageId,
     required this.packageName,
     required this.price,
+    required this.grossAmount,
+    required this.qris,
     required this.paymentInfo,
   });
 
@@ -212,6 +216,8 @@ class OrderInfo {
         packageId: json['package_id'] as String,
         packageName: json['package_name'] as String? ?? json['package_id'],
         price: json['price'] as int,
+        grossAmount: json['gross_amount'] as String? ?? '',
+        qris: json['qris'] as String? ?? '',
         paymentInfo: json['payment_info'] as String? ?? '',
       );
 }
