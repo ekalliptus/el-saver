@@ -220,9 +220,14 @@ PREMIUM_PACKAGES = {
 # Manual payment instructions shown to the buyer (QRIS/DANA/WA contact).
 PAYMENT_INFO = os.getenv(
     "PAYMENT_INFO",
-    "Bayar via QRIS/DANA. Hubungi WhatsApp admin untuk konfirmasi pembayaran.",
+    "Scan QRIS dengan e-wallet (GoPay/DANA/OVO) atau m-banking. "
+    "Lisensi aktif otomatis setelah pembayaran terdeteksi.",
 )
 ADMIN_KEY = os.getenv("ADMIN_KEY", "change-admin-key")
+# Static GoPay merchant QRIS payload (EMVCo) converted to dynamic per order.
+STATIC_QRIS = os.getenv("STATIC_QRIS", "")
+# HMAC secret for the payment webhook (auto-activation trigger).
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 
 # Premium licenses: keys.json holds {"KEY1": {"device_id": null, "redeemed_at": null}, ...}
 PREMIUM_FILE = Path(os.getenv("PREMIUM_FILE", str(COOKIE_PATH.parent / "premium-licenses.json")))
@@ -330,6 +335,68 @@ def _generate_license(licenses: dict) -> str:
             return key
 
 
+def _crc16(payload: str) -> str:
+    """CRC-16/CCITT-FALSE as required by EMVCo QRIS (tag 63)."""
+    crc = 0xFFFF
+    for byte in payload.encode():
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) if crc & 0x8000 else crc << 1
+            crc &= 0xFFFF
+    return f"{crc:04X}"
+
+
+def _tlv_parse(qris: str) -> list[tuple[str, str]]:
+    out = []
+    i = 0
+    while i + 4 <= len(qris):
+        tag = qris[i:i + 2]
+        length = int(qris[i + 2:i + 4])
+        out.append((tag, qris[i + 4:i + 4 + length]))
+        i += 4 + length
+    return out
+
+
+def _tlv_build(entries: list[tuple[str, str]]) -> str:
+    return "".join(f"{tag}{len(value):02d}{value}" for tag, value in entries)
+
+
+def _qris_dynamic(static_qris: str, amount: str) -> str:
+    """Convert a static QRIS payload to dynamic (port of
+    qris-static-dynamic-core): switch to dynamic mode, inject the amount
+    right after the currency tag, recompute CRC. All other tags are kept."""
+    if not static_qris:
+        return ""
+    entries = _tlv_parse(static_qris)
+    out = []
+    inserted = False
+    for tag, value in entries:
+        if tag == "63":
+            continue                      # CRC recomputed at the end
+        if tag == "01":
+            out.append(("01", "12"))      # point of initiation: dynamic
+        elif tag == "53":
+            out.append((tag, value))      # currency
+            out.append(("54", amount))    # transaction amount
+            inserted = True
+        elif tag == "54":
+            out.append(("54", amount))
+            inserted = True
+        else:
+            out.append((tag, value))
+    if not inserted:
+        idx = next((i for i, (t, _) in enumerate(out) if t == "58"), len(out))
+        out.insert(idx, ("54", amount))
+    body = _tlv_build(out)
+    return body + "6304" + _crc16(body)
+
+
+def _order_amount_cents(price: int, order_id: str) -> int:
+    """Unique 1-99 cent suffix so each order's gross amount is unique and a
+    single payment report can be matched to exactly one order."""
+    return (int(order_id[:4], 16) % 99) + 1
+
+
 class OrderPayload(BaseModel):
     device_id: str
     package_id: str
@@ -361,11 +428,16 @@ def premium_order(payload: OrderPayload, x_api_key: str = Header()):
     _write_licenses(licenses)
 
     order_id = _uuid.uuid4().hex[:16]
+    cents = _order_amount_cents(pkg["price"], order_id)
+    gross_amount = f"{pkg['price']}.{cents:02d}"
+    qris_payload = _qris_dynamic(STATIC_QRIS, gross_amount)
+
     orders = _read_orders()
     orders[order_id] = {
         "device_id": device_id,
         "package_id": payload.package_id,
         "price": pkg["price"],
+        "gross_amount": gross_amount,
         "status": "pending",
         "license": license_key,
         "created_at": datetime.utcnow().isoformat(),
@@ -377,6 +449,8 @@ def premium_order(payload: OrderPayload, x_api_key: str = Header()):
         "package_id": payload.package_id,
         "package_name": pkg["name"],
         "price": pkg["price"],
+        "gross_amount": gross_amount,
+        "qris": qris_payload,
         "payment_info": PAYMENT_INFO,
     }
 
@@ -393,6 +467,8 @@ def premium_order_status(order_id: str, x_api_key: str = Header()):
         "status": order["status"],
         "package_id": order["package_id"],
         "price": order["price"],
+        "gross_amount": order.get("gross_amount"),
+        "qris": order.get("qris"),
     }
     if order["status"] == "paid":
         # Auto-activate on this device: the app stores the key itself.
@@ -457,3 +533,72 @@ def premium_admin_orders(payload: AdminListPayload):
         for oid, o in orders.items() if o["status"] == "pending"
     ]
     return {"pending": pending}
+
+
+import hashlib
+import hmac as _hmac
+
+
+class PaymentWebhookPayload(BaseModel):
+    # Matches a pending order either by id or by its unique gross amount.
+    order_id: str | None = None
+    gross_amount: str | None = None
+    status: str = "settlement"
+    signature: str  # HMAC-SHA256(order_id|gross_amount, WEBHOOK_SECRET)
+
+
+@app.post("/premium/webhook")
+def premium_webhook(payload: PaymentWebhookPayload):
+    """Payment-notification endpoint for auto-activation. Any detection
+    source (Midtrans relay, GoPay merchant watcher, manual script) posts
+    here; the matching pending order is marked paid and its license
+    activated. Signature: HMAC-SHA256 over 'order_id|gross_amount'."""
+    if not WEBHOOK_SECRET:
+        raise HTTPException(503, "Webhook belum dikonfigurasi")
+    msg = f"{payload.order_id or ''}|{payload.gross_amount or ''}"
+    expected = _hmac.new(
+        WEBHOOK_SECRET.encode(), msg.encode(), hashlib.sha256
+    ).hexdigest()
+    if not _hmac.compare_digest(expected, payload.signature):
+        raise HTTPException(403, "Signature tidak valid")
+    if payload.status.lower() not in {"settlement", "paid", "success"}:
+        return {"status": "ignored", "reason": payload.status}
+
+    orders = _read_orders()
+    order = None
+    order_id = None
+    if payload.order_id and payload.order_id in orders:
+        order_id = payload.order_id
+        order = orders[order_id]
+    elif payload.gross_amount:
+        for oid, o in orders.items():
+            if o["status"] == "pending" and o.get("gross_amount") == payload.gross_amount:
+                order_id, order = oid, o
+                break
+    if order is None:
+        raise HTTPException(404, "Order tidak ditemukan")
+    if order["status"] == "paid":
+        return {"status": "ok", "already_paid": True, "order_id": order_id}
+
+    licenses = _read_licenses()
+    entry = licenses.get(order["license"])
+    if entry is None:
+        raise HTTPException(500, "Lisensi order hilang")
+    pkg = PREMIUM_PACKAGES[order["package_id"]]
+    entry["device_id"] = order["device_id"]
+    entry["redeemed_at"] = datetime.utcnow().isoformat()
+    if pkg.get("days"):
+        entry["expires_at"] = (
+            datetime.utcnow().replace(microsecond=0)
+            + timedelta(days=pkg["days"])
+        ).isoformat()
+    else:
+        entry["expires_at"] = None
+    licenses[order["license"]] = entry
+    _write_licenses(licenses)
+
+    order["status"] = "paid"
+    order["paid_at"] = datetime.utcnow().isoformat()
+    orders[order_id] = order
+    _write_orders(orders)
+    return {"status": "ok", "paid": True, "order_id": order_id}
