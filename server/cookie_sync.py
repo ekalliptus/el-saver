@@ -15,9 +15,11 @@ Environment:
 import json
 import os
 import re
+import secrets as _secrets
 import subprocess
 import time
-from datetime import datetime
+import uuid as _uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
@@ -205,8 +207,27 @@ def health():
 
 # --- Premium licenses -------------------------------------------------------
 
-_LICENSE_RE = re.compile(r"^ELS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+LICENSE_RE = re.compile(r"^ELS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
 _DEVICE_RE = re.compile(r"^[a-f0-9]{8,64}$")
+
+# Purchase packages. days=null => perpetual.
+PREMIUM_PACKAGES = {
+    "monthly": {"name": "Premium 1 Bulan", "price": 5000, "days": 30},
+    "yearly": {"name": "Premium 1 Tahun", "price": 15000, "days": 365},
+    "lifetime": {"name": "Premium Selamanya", "price": 25000, "days": None},
+}
+
+# Manual payment instructions shown to the buyer (QRIS/DANA/WA contact).
+PAYMENT_INFO = os.getenv(
+    "PAYMENT_INFO",
+    "Bayar via QRIS/DANA. Hubungi WhatsApp admin untuk konfirmasi pembayaran.",
+)
+ADMIN_KEY = os.getenv("ADMIN_KEY", "change-admin-key")
+
+# Premium licenses: keys.json holds {"KEY1": {"device_id": null, "redeemed_at": null}, ...}
+PREMIUM_FILE = Path(os.getenv("PREMIUM_FILE", str(COOKIE_PATH.parent / "premium-licenses.json")))
+# Purchase orders: {order_id: {device_id, package_id, status, license, created_at, paid_at}}
+ORDER_FILE = Path(os.getenv("ORDER_FILE", str(COOKIE_PATH.parent / "premium-orders.json")))
 
 
 def _read_licenses() -> dict:
@@ -233,7 +254,7 @@ def premium_redeem(payload: RedeemPayload, x_api_key: str = Header()):
     _check_key(x_api_key)
     key = payload.key.strip().upper()
     device_id = payload.device_id.strip().lower()
-    if not _LICENSE_RE.match(key):
+    if not LICENSE_RE.match(key):
         raise HTTPException(400, "Format kunci tidak valid (ELS-XXXX-XXXX-XXXX)")
     if not _DEVICE_RE.match(device_id):
         raise HTTPException(400, "device_id tidak valid")
@@ -253,6 +274,19 @@ def premium_redeem(payload: RedeemPayload, x_api_key: str = Header()):
     return {"status": "ok", "premium": True}
 
 
+def _license_active(entry: dict) -> bool:
+    """A license is active when bound to a device and not past expiry."""
+    if not entry.get("device_id"):
+        return False
+    expires_at = entry.get("expires_at")
+    if not expires_at:
+        return True
+    try:
+        return datetime.fromisoformat(expires_at) > datetime.utcnow()
+    except ValueError:
+        return False
+
+
 class VerifyPayload(BaseModel):
     device_id: str
 
@@ -265,6 +299,161 @@ def premium_verify(payload: VerifyPayload, x_api_key: str = Header()):
         raise HTTPException(400, "device_id tidak valid")
     licenses = _read_licenses()
     premium = any(
-        entry.get("device_id") == device_id for entry in licenses.values()
+        entry.get("device_id") == device_id and _license_active(entry)
+        for entry in licenses.values()
     )
     return {"premium": premium}
+
+
+# --- Purchase flow (auto-generated licenses, no manual key input) ----------
+
+
+def _read_orders() -> dict:
+    if ORDER_FILE.exists():
+        try:
+            return json.loads(ORDER_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _write_orders(data: dict):
+    ORDER_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ORDER_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _generate_license(licenses: dict) -> str:
+    while True:
+        raw = _secrets.token_hex(6).upper()
+        key = "ELS-" + "-".join(raw[i:i + 4] for i in range(0, 12, 4))
+        if key not in licenses:
+            return key
+
+
+class OrderPayload(BaseModel):
+    device_id: str
+    package_id: str
+
+
+@app.get("/premium/packages")
+def premium_packages():
+    return {
+        "packages": [
+            {"id": pid, **pkg} for pid, pkg in PREMIUM_PACKAGES.items()
+        ]
+    }
+
+
+@app.post("/premium/order")
+def premium_order(payload: OrderPayload, x_api_key: str = Header()):
+    _check_key(x_api_key)
+    device_id = payload.device_id.strip().lower()
+    if not _DEVICE_RE.match(device_id):
+        raise HTTPException(400, "device_id tidak valid")
+    pkg = PREMIUM_PACKAGES.get(payload.package_id)
+    if pkg is None:
+        raise HTTPException(400, "Paket tidak dikenal")
+
+    # Reserve a fresh license bound to this device right away.
+    licenses = _read_licenses()
+    license_key = _generate_license(licenses)
+    licenses[license_key] = {"device_id": None, "redeemed_at": None}
+    _write_licenses(licenses)
+
+    order_id = _uuid.uuid4().hex[:16]
+    orders = _read_orders()
+    orders[order_id] = {
+        "device_id": device_id,
+        "package_id": payload.package_id,
+        "price": pkg["price"],
+        "status": "pending",
+        "license": license_key,
+        "created_at": datetime.utcnow().isoformat(),
+        "paid_at": None,
+    }
+    _write_orders(orders)
+    return {
+        "order_id": order_id,
+        "package_id": payload.package_id,
+        "package_name": pkg["name"],
+        "price": pkg["price"],
+        "payment_info": PAYMENT_INFO,
+    }
+
+
+@app.get("/premium/order/{order_id}")
+def premium_order_status(order_id: str, x_api_key: str = Header()):
+    _check_key(x_api_key)
+    orders = _read_orders()
+    order = orders.get(order_id)
+    if order is None:
+        raise HTTPException(404, "Order tidak ditemukan")
+    result = {
+        "order_id": order_id,
+        "status": order["status"],
+        "package_id": order["package_id"],
+        "price": order["price"],
+    }
+    if order["status"] == "paid":
+        # Auto-activate on this device: the app stores the key itself.
+        licenses = _read_licenses()
+        entry = licenses.get(order["license"], {})
+        result["license_key"] = order["license"]
+        result["expires_at"] = entry.get("expires_at")
+    return result
+
+
+class AdminConfirmPayload(BaseModel):
+    admin_key: str
+    order_id: str
+
+
+@app.post("/premium/admin/confirm")
+def premium_admin_confirm(payload: AdminConfirmPayload):
+    if payload.admin_key != ADMIN_KEY:
+        raise HTTPException(403, "Admin key salah")
+    orders = _read_orders()
+    order = orders.get(payload.order_id)
+    if order is None:
+        raise HTTPException(404, "Order tidak ditemukan")
+    if order["status"] == "paid":
+        return {"status": "ok", "already_paid": True}
+
+    licenses = _read_licenses()
+    entry = licenses.get(order["license"])
+    if entry is None:
+        raise HTTPException(500, "Lisensi order hilang")
+    pkg = PREMIUM_PACKAGES[order["package_id"]]
+    entry["device_id"] = order["device_id"]
+    entry["redeemed_at"] = datetime.utcnow().isoformat()
+    if pkg.get("days"):
+        entry["expires_at"] = (
+            datetime.utcnow().replace(microsecond=0)
+            + timedelta(days=pkg["days"])
+        ).isoformat()
+    else:
+        entry["expires_at"] = None
+    licenses[order["license"]] = entry
+    _write_licenses(licenses)
+
+    order["status"] = "paid"
+    order["paid_at"] = datetime.utcnow().isoformat()
+    _write_orders(orders)
+    return {"status": "ok", "paid": True}
+
+
+class AdminListPayload(BaseModel):
+    admin_key: str
+
+
+@app.post("/premium/admin/orders")
+def premium_admin_orders(payload: AdminListPayload):
+    if payload.admin_key != ADMIN_KEY:
+        raise HTTPException(403, "Admin key salah")
+    orders = _read_orders()
+    pending = [
+        {"order_id": oid, "package_id": o["package_id"],
+         "price": o["price"], "created_at": o["created_at"]}
+        for oid, o in orders.items() if o["status"] == "pending"
+    ]
+    return {"pending": pending}
