@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
-import 'package:flutter/services.dart';
 import 'package:open_file/open_file.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -220,31 +219,8 @@ class UpdateService {
     }
   }
 
-  static const MethodChannel _channel = MethodChannel('pip_service');
-
-  Future<bool> installUpdate(String apkPath) async {
-    try {
-      if (Platform.isAndroid) {
-        final success = await _channel.invokeMethod<bool>('installApk', {
-          'apkPath': apkPath,
-        });
-        if (success != true) {
-          // Fallback: open with system installer if silent install failed
-          developer.log(
-              'Silent install failed, falling back to system installer',
-              name: 'UpdateService');
-          return false;
-        }
-        return true;
-      }
-    } catch (e) {
-      developer.log('Install update failed: $e', name: 'UpdateService');
-    }
-    return false;
-  }
-
-  /// Fallback: open the APK with the system package installer (shows popup).
-  /// Used when silent install via PackageInstaller fails.
+  /// Open the APK with the system package installer (shows the standard
+  /// install popup). This is the only install path — no silent installs.
   Future<bool> installUpdateManual(String apkPath) async {
     try {
       if (Platform.isAndroid) {

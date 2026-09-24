@@ -20,14 +20,13 @@ class UpdateDialog extends StatefulWidget {
   State<UpdateDialog> createState() => _UpdateDialogState();
 }
 
-enum _Phase { info, downloading, installing, done, error }
+enum _Phase { info, downloading, waitingInstaller, done, error }
 
 class _UpdateDialogState extends State<UpdateDialog> {
   _Phase _phase = _Phase.info;
   double _progress = 0;
   String _errorMsg = "";
   String? _apkPath;
-
   Future<void> _startDownload() async {
     setState(() => _phase = _Phase.downloading);
 
@@ -49,21 +48,17 @@ class _UpdateDialogState extends State<UpdateDialog> {
     }
 
     _apkPath = path;
-    setState(() => _phase = _Phase.installing);
-    final installed = await widget.updateService.installUpdate(path);
+    // Manual install only: hand the APK to the system package installer and
+    // wait for the user to finish the popup flow.
+    setState(() => _phase = _Phase.waitingInstaller);
+    final opened = await widget.updateService.installUpdateManual(path);
 
-    if (mounted) {
-      if (installed) {
-        setState(() => _phase = _Phase.done);
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) Navigator.of(context).pop();
-        });
-      } else {
-        setState(() {
-          _phase = _Phase.error;
-          _errorMsg = "Instalasi otomatis gagal. Coba install manual.";
-        });
-      }
+    if (!mounted) return;
+    if (!opened) {
+      setState(() {
+        _phase = _Phase.error;
+        _errorMsg = "Tidak bisa membuka installer sistem. Coba lagi.";
+      });
     }
   }
 
@@ -113,7 +108,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 const AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
           ),
         );
-      case _Phase.installing:
+      case _Phase.waitingInstaller:
         return const SizedBox(
           width: 48,
           height: 48,
@@ -145,7 +140,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     final titles = {
       _Phase.info: AppStrings.updateAvailable,
       _Phase.downloading: "Mengunduh Update...",
-      _Phase.installing: "Menginstall...",
+      _Phase.waitingInstaller: "Menunggu installer...",
       _Phase.done: "Selesai!",
       _Phase.error: "Gagal",
     };
@@ -172,10 +167,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
           textAlign: TextAlign.center,
           style: TextStyle(color: mutedColor, fontSize: 13));
     }
-    if (_phase == _Phase.done) {
-      return Text("Update sedang diinstall. Tunggu sebentar...",
-          textAlign: TextAlign.center,
-          style: TextStyle(color: mutedColor, fontSize: 13));
+    if (_phase == _Phase.waitingInstaller) {
+      return Text(
+        "Ikuti popup installer yang muncul di layar untuk menyelesaikan "
+        "pembaruan. Aplikasi jangan ditutup sampai install selesai.",
+        textAlign: TextAlign.center,
+        style: TextStyle(color: mutedColor, fontSize: 13),
+      );
     }
     return Text(
       "v${info.currentVersionName} → v${info.versionName}",
@@ -249,10 +247,30 @@ class _UpdateDialogState extends State<UpdateDialog> {
           ],
         );
 
-      case _Phase.installing:
-        return Text(
-          "Menginstall update secara otomatis...",
-          style: TextStyle(color: mutedColor, fontSize: 12),
+      case _Phase.waitingInstaller:
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _openSystemInstaller,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primaryColor,
+                  side: BorderSide(
+                      color: AppColors.primaryColor.withOpacity(0.3)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text("Buka Installer Lagi"),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child:
+                  Text("Tutup", style: TextStyle(color: mutedColor)),
+            ),
+          ],
         );
 
       case _Phase.done:
@@ -280,7 +298,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextButton(
-                    onPressed: _openManualInstaller,
+                    onPressed: _openSystemInstaller,
                     child: Text("Install Manual",
                         style: TextStyle(color: mutedColor)),
                   ),
@@ -292,14 +310,11 @@ class _UpdateDialogState extends State<UpdateDialog> {
     }
   }
 
-  /// Fallback: open the APK with the system package installer (shows popup).
-  Future<void> _openManualInstaller() async {
-    if (_apkPath == null) return;
-    // Re-download if path lost
-    final path = _apkPath!;
-    if (!await File(path).exists()) return;
+  /// Re-open the system installer if the user dismissed the popup.
+  Future<void> _openSystemInstaller() async {
+    final path = _apkPath;
+    if (path == null || !await File(path).exists()) return;
     try {
-      // Use Android intent to open the system installer
       await widget.updateService.installUpdateManual(path);
     } catch (_) {
       if (mounted) {

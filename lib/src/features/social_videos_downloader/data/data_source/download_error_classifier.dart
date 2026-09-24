@@ -22,7 +22,10 @@ class DownloadErrorClassifier {
       return AuthRequiredFailure(
         platform: platform,
         sourceCode: sourceCode,
-        message: 'Konten ini memerlukan login ${_name(platform)}.',
+        message:
+            'Video ${_name(platform)} tidak bisa diambil karena platformnya '
+            'menolak akses tanpa login (konten private atau dibatasi anti-bot). '
+            'Login sekali saja, setelah itu video bisa diunduh otomatis.',
       );
     }
     return ServerFailure(message: rawMessage);

@@ -1,10 +1,7 @@
 package com.ekalliptus.saver
 
 import android.app.PictureInPictureParams
-import android.app.PendingIntent
 import android.content.ContentValues
-import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.content.res.Configuration
 import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
@@ -53,20 +50,6 @@ class MainActivity: FlutterActivity() {
                 "exitPipMode" -> {
                     exitPipMode()
                     result.success(null)
-                }
-                "installApk" -> {
-                    val apkPath = call.argument<String>("apkPath")
-                    if (apkPath != null) {
-                        try {
-                            installApk(apkPath)
-                            result.success(true)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            result.success(false)
-                        }
-                    } else {
-                        result.success(false)
-                    }
                 }
                 else -> {
                     result.notImplemented()
@@ -240,52 +223,6 @@ class MainActivity: FlutterActivity() {
             arrayOf(mimeType),
             null
         )
-    }
-
-    /// Install an APK silently via PackageInstaller.Session.
-    /// Requires the user to have granted "Install unknown apps" to this app.
-    private fun installApk(apkPath: String) {
-        val file = File(apkPath)
-        if (!file.exists()) {
-            throw IllegalArgumentException("APK file not found: $apkPath")
-        }
-
-        val packageInstaller = packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(
-            PackageInstaller.SessionParams.MODE_FULL_INSTALL
-        )
-        val sessionId = packageInstaller.createSession(params)
-        val session = packageInstaller.openSession(sessionId)
-
-        try {
-            // Add the APK file to the session
-            val inputStream = FileInputStream(file)
-            val outStream = session.openWrite("el_saver_update.apk", 0, file.length())
-            try {
-                val buffer = ByteArray(8192)
-                var size: Int
-                while (inputStream.read(buffer).also { size = it } > 0) {
-                    outStream.write(buffer, 0, size)
-                }
-                session.fsync(outStream)
-            } finally {
-                outStream.close()
-                inputStream.close()
-            }
-
-            // Commit the session with a broadcast intent to receive the result
-            val intent = Intent(this, MainActivity::class.java)
-            val pendingIntent = PendingIntent.getActivity(
-                this,
-                sessionId,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            session.commit(pendingIntent.intentSender)
-        } catch (e: Exception) {
-            session.abandon()
-            throw e
-        }
     }
 
     private fun isPipSupported(): Boolean {

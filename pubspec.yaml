@@ -1,7 +1,7 @@
 name: el_saver
 description: "EL-Saver - Your Ultimate Video Saver"
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
-version: 1.11.3+23
+version: 1.11.4+24
 
 environment:
   sdk: ">=3.4.3 <4.0.0"
