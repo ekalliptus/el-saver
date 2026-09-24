@@ -14,6 +14,7 @@ import '../features/social_videos_downloader/presentation/screens/downloads_scre
 import '../features/social_videos_downloader/presentation/widgets/downloads_screen/view_video_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/whatsapp_status/presentation/screens/whatsapp_status_screen.dart';
+import '../features/premium/presentation/screens/premium_purchase_screen.dart';
 import '../core/screens/permission_setup_screen.dart';
 
 class Routes {
@@ -26,6 +27,7 @@ class Routes {
   static const String webviewLogin = "/webviewLogin";
   static const String legal = "/legal";
   static const String whatsappStatus = "/whatsappStatus";
+  static const String premiumPurchase = "/premiumPurchase";
 }
 
 class AppRounter {
@@ -51,6 +53,9 @@ class AppRounter {
       case Routes.whatsappStatus:
         return MaterialPageRoute(
             builder: (context) => const WhatsappStatusScreen());
+      case Routes.premiumPurchase:
+        return MaterialPageRoute(
+            builder: (context) => const PremiumPurchaseScreen());
       case Routes.viewVideo:
         developer.log('✅ Creating ViewVideoScreen route', name: 'AppRouter');
         return MaterialPageRoute(

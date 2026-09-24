@@ -1,7 +1,7 @@
 name: el_saver
 description: "EL-Saver - Your Ultimate Video Saver"
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
-version: 1.12.0+25
+version: 1.13.0+26
 
 environment:
   sdk: ">=3.4.3 <4.0.0"
@@ -41,6 +41,7 @@ dependencies:
   webview_flutter: ^4.10.0
   webview_flutter_android: ^4.3.0
   flutter_secure_storage: ^11.0.0
+  firebase_messaging: ^16.7.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

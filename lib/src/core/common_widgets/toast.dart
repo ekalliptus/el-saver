@@ -10,6 +10,9 @@ Future<bool?> buildToast({required String msg, required ToastType type}) =>
       msg: msg,
       fontSize: FontSize.details,
       textColor: AppColors.white,
-      backgroundColor:
-          type == ToastType.success ? AppColors.green : AppColors.red,
+      backgroundColor: switch (type) {
+        ToastType.success => AppColors.green,
+        ToastType.info => AppColors.primaryColor,
+        ToastType.error => AppColors.red,
+      },
     );

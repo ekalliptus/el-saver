@@ -50,6 +50,20 @@ class _WhatsappStatusView extends StatelessWidget {
               ),
             );
           }
+          if (state is WhatsappStatusPermissionNeeded) {
+            return _StatusMessage(
+              icon: Icons.folder_off_outlined,
+              title: 'Butuh izin akses file',
+              message:
+                  'Status WhatsApp tersimpan di folder tersembunyi WhatsApp. '
+                  'Aktifkan izin "All files access" untuk EL-Saver agar '
+                  'aplikasi bisa membacanya.',
+              action: 'Berikan Izin',
+              onAction: () => context
+                  .read<WhatsappStatusBloc>()
+                  .add(const WhatsappStatusRequestPermission()),
+            );
+          }
           if (state is WhatsappStatusError) {
             return _StatusMessage(
               icon: Icons.error_outline,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/routes_manager.dart';
 import '../services/premium_service.dart';
 import '../utils/app_colors.dart';
 
@@ -98,7 +99,19 @@ class _PremiumDialogState extends State<_PremiumDialog> {
             const _BenefitRow('Aktif selamanya di perangkat ini'),
             const _BenefitRow('Mendukung update fitur berikutnya'),
             const SizedBox(height: 16),
-            const Text('Kode lisensi'),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).pushNamed(Routes.premiumPurchase);
+                },
+                icon: const Icon(Icons.shopping_bag_outlined, size: 18),
+                label: const Text('Beli Premium'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('Punya kode lisensi? Masukkan di sini:'),
             const SizedBox(height: 6),
             TextField(
               controller: _keyController,

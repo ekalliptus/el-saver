@@ -2,7 +2,7 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'dart:developer' as developer;
@@ -29,8 +29,10 @@ class PermissionService {
 
   // Check if all permissions are granted
   Future<bool> areAllPermissionsGranted() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_permissionsGrantedKey) ?? false;
+    // Real runtime state, not just the stored flag: users upgrading from
+    // older versions already have the flag set but never granted the newer
+    // permissions (media / all-files), so they must be re-offered setup.
+    return await hasMediaAccess() && await hasAllFilesAccess();
   }
 
   // Mark all permissions as granted
@@ -55,15 +57,21 @@ class PermissionService {
         return null;
       }
 
-      // Downloads stay in app-private storage. Gallery insertion requests any
-      // legacy permission only when the user explicitly saves to Gallery.
+      // Media access (read) — needed for the WhatsApp status saver and
+      // for browsing saved media on legacy Android versions.
+      await _ensureMediaAccess(context);
 
-      // Request install unknown apps permission
+      // All-files access — WhatsApp stores statuses in a hidden folder that
+      // scoped-storage media permissions cannot list on Android 11+.
+      await _ensureAllFilesAccess(context);
+
+      // Notifications (Android 13+) — optional, for update/announcement push.
+      await _ensureNotificationAccess(context);
+
+      // Request install unknown apps permission (needed for the system
+      // installer popup during in-app updates)
       bool installGranted = await _requestInstallPermission(context);
       if (!installGranted) return false;
-
-      // Request PIP permission (if supported)
-      // PIP is not critical, so we continue even if not granted
 
       // Mark all permissions as granted
       await markPermissionsGranted();
@@ -82,6 +90,112 @@ class PermissionService {
           name: 'PermissionService');
       return false;
     }
+  }
+
+  // --- Real runtime checks (permission_handler) -----------------------------
+
+  /// Media read access: granular media permissions on Android 13+, the
+  /// classic storage permission below that.
+  Future<bool> hasMediaAccess() async {
+    if (!Platform.isAndroid) return true;
+    final videos = await Permission.videos.isGranted;
+    final images = await Permission.photos.isGranted;
+    if (videos || images) return true;
+    // Android <=12 fallback / partial access accepted too
+    final partial = await Permission.videos.isLimited ||
+        await Permission.photos.isLimited;
+    if (partial) return true;
+    final legacy = await Permission.storage.isGranted;
+    return legacy;
+  }
+
+  Future<bool> ensureMediaAccess() async {
+    if (!Platform.isAndroid) return true;
+    if (await hasMediaAccess()) return true;
+    final results = await [
+      Permission.videos,
+      Permission.photos,
+    ].request();
+    final ok = results.values
+        .any((s) => s.isGranted || s.isLimited);
+    if (!ok) {
+      // Android <=12: single storage permission covers both
+      final legacy = await Permission.storage.request();
+      return legacy.isGranted;
+    }
+    return ok;
+  }
+
+  /// All-files access — required to list WhatsApp's hidden `.Statuses`
+  /// folder on Android 11+. Opens the system "All files access" page.
+  Future<bool> hasAllFilesAccess() async {
+    if (!Platform.isAndroid) return true;
+    return await Permission.manageExternalStorage.isGranted;
+  }
+
+  Future<bool> ensureAllFilesAccess() async {
+    if (!Platform.isAndroid) return true;
+    if (await hasAllFilesAccess()) return true;
+    final result = await Permission.manageExternalStorage.request();
+    return result.isGranted;
+  }
+
+  /// Notification permission (Android 13+). Older versions are always-on.
+  Future<bool> hasNotificationAccess() async {
+    if (!Platform.isAndroid) return true;
+    return await Permission.notification.isGranted;
+  }
+
+  Future<bool> ensureNotificationAccess() async {
+    if (!Platform.isAndroid) return true;
+    if (await hasNotificationAccess()) return true;
+    final result = await Permission.notification.request();
+    return result.isGranted;
+  }
+
+  /// True when any critical runtime permission is still missing — used to
+  /// re-offer the setup flow to users who upgraded from older versions.
+  Future<bool> hasMissingCriticalPermissions() async {
+    if (!Platform.isAndroid) return false;
+    return !(await hasMediaAccess()) || !(await hasAllFilesAccess());
+  }
+
+  Future<void> _ensureMediaAccess(BuildContext context) async {
+    await _showPermissionDialog(
+      context,
+      icon: Icons.photo_library_outlined,
+      title: 'Akses Media',
+      description:
+          'Dibutuhkan untuk fitur Simpan Status WhatsApp dan menyimpan media '
+          'ke galeri. Izinkan akses foto & video saat diminta.',
+      onRequest: ensureMediaAccess,
+    );
+  }
+
+  Future<void> _ensureAllFilesAccess(BuildContext context) async {
+    await _showPermissionDialog(
+      context,
+      icon: Icons.folder_open,
+      title: 'Akses File Lengkap',
+      description:
+          'Status WhatsApp tersimpan di folder tersembunyi yang hanya bisa '
+          'dibaca dengan izin "All files access". Aktifkan pada halaman '
+          'pengaturan yang terbuka.',
+      onRequest: ensureAllFilesAccess,
+    );
+  }
+
+  Future<void> _ensureNotificationAccess(BuildContext context) async {
+    await _showPermissionDialog(
+      context,
+      icon: Icons.notifications_active_outlined,
+      title: 'Notifikasi',
+      description:
+          'Untuk menerima info update dan pengumuman penting dari EL-Saver. '
+          '(Opsional)',
+      isOptional: true,
+      onRequest: ensureNotificationAccess,
+    );
   }
 
   // Welcome dialog
