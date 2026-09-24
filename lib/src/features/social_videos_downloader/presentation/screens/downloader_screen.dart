@@ -249,6 +249,9 @@ class _DownloaderScreenState extends State<DownloaderScreen> {
         onAccountsPressed: () {
           Navigator.of(context).pushNamed(Routes.accounts);
         },
+        onStatusPressed: () {
+          Navigator.of(context).pushNamed(Routes.whatsappStatus);
+        },
       ),
     );
   }

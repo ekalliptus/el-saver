@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'core/api/interceptors.dart';
 import 'core/helpers/dio_helper.dart';
+import 'core/services/premium_service.dart';
 import 'core/services/update_service.dart';
 import 'core/services/permission_service.dart';
 import 'features/cookie_auth/cookie_auth_injector.dart';
@@ -39,6 +40,9 @@ void initCore() {
 
   // Permission Service
   sl.registerLazySingleton(() => PermissionService());
+
+  // Premium entitlement service
+  sl.registerLazySingleton(() => PremiumService());
 
   // Network info
   // sl.registerLazySingleton<NetworkInfo>(

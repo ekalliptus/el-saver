@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
+import 'package:el_saver/src/container_injector.dart' show sl;
 import 'package:el_saver/src/core/media_query.dart';
+import 'package:el_saver/src/core/services/premium_service.dart';
+import 'package:el_saver/src/core/widgets/premium_dialog.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/widgets/downloader_Screen/downloader_screen_supported_platforms.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/widgets/downloader_Screen/language_switcher.dart';
 
@@ -35,7 +38,7 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
   @override
   void initState() {
     super.initState();
-    _loadBannerAd();
+    if (!sl<PremiumService>().isPremium) _loadBannerAd();
   }
 
   Future<void> _showLoginRequired(
@@ -164,7 +167,25 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
                               child: Column(
                                 children: [
                                   SizedBox(height: context.height * 0.02),
-                                  const AppBarWithLogo(),
+                                  AppBarWithLogo(
+                                    action: _PremiumButton(
+                                      isPremium:
+                                          sl<PremiumService>().isPremium,
+                                      onPressed: () =>
+                                          showPremiumDialog(
+                                        context,
+                                        premium: sl<PremiumService>(),
+                                        isPremium:
+                                            sl<PremiumService>().isPremium,
+                                        onPremiumChanged: () {
+                                          setState(() {
+                                            _bannerAd?.dispose();
+                                            _bannerAd = null;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ),
                                   SizedBox(height: context.height * 0.03),
                                   DownloaderScreenInputField(
                                     videoLinkController: videoLinkController,
@@ -348,5 +369,49 @@ class _RecentTile extends StatelessWidget {
       case DownloadStatus.paused:
         return Colors.orange;
     }
+  }
+}
+
+/// Crown chip in the app bar; shows Premium state and opens the paywall.
+class _PremiumButton extends StatelessWidget {
+  final bool isPremium;
+  final VoidCallback onPressed;
+
+  const _PremiumButton({required this.isPremium, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isPremium) {
+      return Tooltip(
+        message: 'Premium aktif',
+        child: Icon(Icons.verified_rounded,
+            color: AppColors.green, size: 26),
+      );
+    }
+    return Tooltip(
+      message: 'Beli Premium - tanpa iklan',
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Icon(Icons.workspace_premium,
+                color: Colors.white, size: 26),
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppColors.red,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

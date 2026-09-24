@@ -10,11 +10,13 @@ import 'animated_toggle_button.dart';
 class DownloaderBottomAppBar extends StatelessWidget {
   final VoidCallback? onSharePressed;
   final VoidCallback? onAccountsPressed;
+  final VoidCallback? onStatusPressed;
 
   const DownloaderBottomAppBar({
     super.key,
     this.onSharePressed,
     this.onAccountsPressed,
+    this.onStatusPressed,
   });
 
   @override
@@ -67,6 +69,13 @@ class DownloaderBottomAppBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              _BuildActionButton(
+                icon: Icons.motion_photos_on_rounded,
+                onPressed: onStatusPressed ?? () {},
+                isDark: isDark,
+                tooltip: 'Status WhatsApp',
+                isSecondary: true,
+              ),
               _BuildActionButton(
                 icon: Icons.card_giftcard,
                 onPressed: onSharePressed ?? () {},

@@ -6,6 +6,7 @@ import 'firebase_options.dart';
 import 'package:el_saver/bloc_observer.dart';
 import 'package:el_saver/src/container_injector.dart';
 import 'package:el_saver/src/my_app.dart';
+import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/services/language_service.dart';
 import 'dart:developer' as developer;
 
@@ -27,6 +28,7 @@ void main() async {
 
     await LanguageService.instance.initialize();
     await LanguageService.instance.autoDetectLanguage();
+    await sl<PremiumService>().initialize();
 
     runApp(const MyApp());
   } catch (e) {

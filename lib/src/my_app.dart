@@ -1,10 +1,10 @@
-import 'package:device_preview/device_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:el_saver/src/config/routes_manager.dart';
 import 'package:el_saver/src/container_injector.dart';
 import 'package:el_saver/src/core/utils/app_strings.dart';
+import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/services/update_service.dart';
 import 'package:el_saver/src/core/widgets/update_dialog.dart';
 import 'package:el_saver/src/core/providers/language_provider.dart';
@@ -34,6 +34,7 @@ class _MyAppState extends State<MyApp> {
     // Init + start update checks after app is ready
     Future.delayed(const Duration(seconds: 5), () async {
       if (!mounted) return;
+      await sl<PremiumService>().verify();
       await _updateService.initialize();
       _updateService.startPeriodicCheck();
       _updateSub = _updateService.updateStream.listen((info) {
@@ -67,39 +68,34 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return DevicePreview(
-      enabled: false,
-      builder: (context) {
-        return ChangeNotifierProvider<LanguageProvider>(
-          create: (_) => LanguageProvider(),
-          child: MultiBlocProvider(
-            providers: [
-              BlocProvider<DownloaderBloc>(create: (_) => sl<DownloaderBloc>()),
-              BlocProvider<ThemeBloc>(create: (_) => sl<ThemeBloc>()),
-            ],
-            child: Consumer<LanguageProvider>(
-              builder: (context, _, child) {
-                return BlocBuilder<ThemeBloc, ThemeState>(
-                  builder: (context, state) {
-                    return MaterialApp(
-                      navigatorKey: navigatorKey,
-                      title: AppStrings.appName,
-                      debugShowCheckedModeBanner: false,
-                      theme: state.themeData,
-                      darkTheme: ThemeState.darkTheme.themeData,
-                      themeMode: state.themeData.brightness == Brightness.dark
-                          ? ThemeMode.dark
-                          : ThemeMode.light,
-                      initialRoute: Routes.splash,
-                      onGenerateRoute: AppRounter.getRoute,
-                    );
-                  },
+    return ChangeNotifierProvider<LanguageProvider>(
+      create: (_) => LanguageProvider(),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<DownloaderBloc>(create: (_) => sl<DownloaderBloc>()),
+          BlocProvider<ThemeBloc>(create: (_) => sl<ThemeBloc>()),
+        ],
+        child: Consumer<LanguageProvider>(
+          builder: (context, _, child) {
+            return BlocBuilder<ThemeBloc, ThemeState>(
+              builder: (context, state) {
+                return MaterialApp(
+                  navigatorKey: navigatorKey,
+                  title: AppStrings.appName,
+                  debugShowCheckedModeBanner: false,
+                  theme: state.themeData,
+                  darkTheme: ThemeState.darkTheme.themeData,
+                  themeMode: state.themeData.brightness == Brightness.dark
+                      ? ThemeMode.dark
+                      : ThemeMode.light,
+                  initialRoute: Routes.splash,
+                  onGenerateRoute: AppRounter.getRoute,
                 );
               },
-            ),
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 }

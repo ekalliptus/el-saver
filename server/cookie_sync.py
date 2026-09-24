@@ -14,6 +14,7 @@ Environment:
 
 import json
 import os
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -29,6 +30,9 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 COOKIE_PATH = Path(os.getenv("COOKIE_PATH", "./cookies.json"))
 API_KEY = os.getenv("API_KEY", "change-me-to-a-secret-key")
 COBALT_CONTAINER = os.getenv("COBALT_CONTAINER", "cobalt")
+
+# Premium licenses: keys.json holds {"KEY1": {"device_id": null, "redeemed_at": null}, ...}
+PREMIUM_FILE = Path(os.getenv("PREMIUM_FILE", str(COOKIE_PATH.parent / "premium-licenses.json")))
 
 # Dir for per-platform Netscape cookie files (youtube.txt, ...) read by ytdlp_api.
 # Must match ytdlp_api's COOKIE_DIR so yt-dlp --cookies picks them up.
@@ -197,3 +201,70 @@ def restart_cobalt(x_api_key: str = Header()):
 @app.get("/health")
 def health():
     return {"status": "ok", "cookie_path": str(COOKIE_PATH), "exists": COOKIE_PATH.exists()}
+
+
+# --- Premium licenses -------------------------------------------------------
+
+_LICENSE_RE = re.compile(r"^ELS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+_DEVICE_RE = re.compile(r"^[a-f0-9]{8,64}$")
+
+
+def _read_licenses() -> dict:
+    if PREMIUM_FILE.exists():
+        try:
+            return json.loads(PREMIUM_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _write_licenses(data: dict):
+    PREMIUM_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PREMIUM_FILE.write_text(json.dumps(data, indent=2))
+
+
+class RedeemPayload(BaseModel):
+    key: str
+    device_id: str
+
+
+@app.post("/premium/redeem")
+def premium_redeem(payload: RedeemPayload, x_api_key: str = Header()):
+    _check_key(x_api_key)
+    key = payload.key.strip().upper()
+    device_id = payload.device_id.strip().lower()
+    if not _LICENSE_RE.match(key):
+        raise HTTPException(400, "Format kunci tidak valid (ELS-XXXX-XXXX-XXXX)")
+    if not _DEVICE_RE.match(device_id):
+        raise HTTPException(400, "device_id tidak valid")
+
+    licenses = _read_licenses()
+    entry = licenses.get(key)
+    if entry is None:
+        raise HTTPException(404, "Kunci tidak dikenal")
+    if entry.get("device_id") and entry["device_id"] != device_id:
+        raise HTTPException(409, "Kunci sudah dipakai di perangkat lain")
+
+    entry["device_id"] = device_id
+    if not entry.get("redeemed_at"):
+        entry["redeemed_at"] = datetime.utcnow().isoformat()
+    licenses[key] = entry
+    _write_licenses(licenses)
+    return {"status": "ok", "premium": True}
+
+
+class VerifyPayload(BaseModel):
+    device_id: str
+
+
+@app.post("/premium/verify")
+def premium_verify(payload: VerifyPayload, x_api_key: str = Header()):
+    _check_key(x_api_key)
+    device_id = payload.device_id.strip().lower()
+    if not _DEVICE_RE.match(device_id):
+        raise HTTPException(400, "device_id tidak valid")
+    licenses = _read_licenses()
+    premium = any(
+        entry.get("device_id") == device_id for entry in licenses.values()
+    )
+    return {"premium": premium}

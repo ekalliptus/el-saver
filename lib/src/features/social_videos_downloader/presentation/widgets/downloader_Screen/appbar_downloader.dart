@@ -3,14 +3,15 @@ import '../../../../../core/utils/app_assets.dart';
 import '../../../../../core/utils/app_strings.dart';
 
 class AppBarWithLogo extends StatelessWidget {
-  const AppBarWithLogo({super.key});
+  final Widget? action;
+
+  const AppBarWithLogo({super.key, this.action});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Image.asset(
             AppAssets.logo,
@@ -34,6 +35,8 @@ class AppBarWithLogo extends StatelessWidget {
               color: Colors.white,
             ),
           ),
+          const Spacer(),
+          if (action != null) action!,
         ],
       ),
     );
