@@ -12,29 +12,38 @@ Environment:
   COBALT_CONTAINER   - Docker container name for Cobalt (for auto-restart)
 """
 
+import hashlib
+import hmac as _hmac
 import json
 import os
 import re
 import secrets as _secrets
 import subprocess
+import threading
 import time
 import uuid as _uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Fail loud on unset secrets: a default-valued API/ADMIN key would expose the
+# whole premium flow (redeem, order, admin confirm) to anyone.
+API_KEY = os.getenv("API_KEY", "change-me-to-a-secret-key")
+ADMIN_KEY = os.getenv("ADMIN_KEY", "change-admin-key")
+if API_KEY in {"", "change-me", "change-me-to-a-secret-key"}:
+    raise RuntimeError("API_KEY must be set to a strong secret in the environment")
+if ADMIN_KEY in {"", "change-admin-key"}:
+    raise RuntimeError("ADMIN_KEY must be set to a strong secret in the environment")
 
 app = FastAPI(title="Cookie Sync", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 COOKIE_PATH = Path(os.getenv("COOKIE_PATH", "./cookies.json"))
-API_KEY = os.getenv("API_KEY", "change-me-to-a-secret-key")
 COBALT_CONTAINER = os.getenv("COBALT_CONTAINER", "cobalt")
-
-# Premium licenses: keys.json holds {"KEY1": {"device_id": null, "redeemed_at": null}, ...}
-PREMIUM_FILE = Path(os.getenv("PREMIUM_FILE", str(COOKIE_PATH.parent / "premium-licenses.json")))
 
 # Dir for per-platform Netscape cookie files (youtube.txt, ...) read by ytdlp_api.
 # Must match ytdlp_api's COOKIE_DIR so yt-dlp --cookies picks them up.
@@ -89,7 +98,12 @@ def _write_netscape(platform: str, cookie_str: str):
     for name, value in _cookie_pairs(cookie_str):
         # domain  include_subdomains  path  secure  expiry  name  value
         lines.append(f"{domain}\tTRUE\t/\tTRUE\t{expiry}\t{name}\t{value}")
-    (COOKIE_DIR / f"{platform}.txt").write_text("\n".join(lines) + "\n")
+    cookie_file = COOKIE_DIR / f"{platform}.txt"
+    cookie_file.write_text("\n".join(lines) + "\n")
+    try:
+        os.chmod(cookie_file, 0o600)
+    except OSError:
+        pass
 
 
 def _delete_netscape(platform: str):
@@ -102,19 +116,91 @@ class CookiePayload(BaseModel):
 
 
 def _check_key(x_api_key: str = Header()):
-    if x_api_key != API_KEY:
+    if not _hmac.compare_digest(x_api_key, API_KEY):
         raise HTTPException(401, "Invalid API key")
 
 
+# --- Shared store/time/rate-limit helpers -----------------------------------
+
+_json_lock = threading.Lock()
+_rate_lock = threading.Lock()
+_rate_hits: dict[str, list[float]] = {}
+
+
+def _rate_limit(request: Request, scope: str, limit: int, window_seconds: int):
+    """Fixed-window per-IP limiter (Caddy sets X-Forwarded-For; uvicorn trusts
+    it for localhost proxies). Enough for a single-process VPS API."""
+    client_ip = request.client.host if request.client else "unknown"
+    bucket_key = f"{scope}:{client_ip}"
+    now = time.monotonic()
+    with _rate_lock:
+        recent = [t for t in _rate_hits.get(bucket_key, []) if now - t < window_seconds]
+        if len(recent) >= limit:
+            raise HTTPException(429, "Terlalu banyak permintaan, coba lagi nanti")
+        recent.append(now)
+        _rate_hits[bucket_key] = recent
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_ts(value: str) -> datetime:
+    """Parse an ISO timestamp; naive values are treated as UTC (legacy rows)."""
+    parsed = datetime.fromisoformat(value)
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
+def _atomic_write_json(path: Path, data: dict):
+    """Write via temp file + os.replace so a crash mid-write can never
+    truncate the store; secrets get 0600."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    os.replace(tmp, path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _load_json_store(path: Path) -> dict:
+    """Read a JSON store. A corrupt file is moved aside so the failure is loud
+    instead of silently resetting all licenses/orders to empty."""
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as error:
+        corrupt = path.with_name(f"{path.name}.corrupt-{int(time.time())}")
+        try:
+            path.replace(corrupt)
+        except OSError:
+            pass
+        raise HTTPException(500, f"Data store korup: {path.name}") from error
+
+
+def _amounts_match(a: str | None, b: str | None) -> bool:
+    """Compare gross amounts numerically ("5000.5" == "5000.50")."""
+    if not a or not b:
+        return False
+    try:
+        return Decimal(a) == Decimal(b)
+    except (InvalidOperation, ValueError):
+        return False
+
+
+def _check_admin_key(candidate: str):
+    if not _hmac.compare_digest(candidate, ADMIN_KEY):
+        raise HTTPException(403, "Admin key salah")
+
+
 def _read_cookies() -> dict:
-    if COOKIE_PATH.exists():
-        return json.loads(COOKIE_PATH.read_text())
-    return {}
+    return _load_json_store(COOKIE_PATH)
 
 
 def _write_cookies(data: dict):
-    COOKIE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    COOKIE_PATH.write_text(json.dumps(data, indent=2))
+    _atomic_write_json(COOKIE_PATH, data)
 
 
 def _restart_cobalt() -> bool:
@@ -129,8 +215,9 @@ def _restart_cobalt() -> bool:
 
 
 @app.post("/cookies")
-def set_cookies(payload: CookiePayload, x_api_key: str = Header()):
+def set_cookies(payload: CookiePayload, request: Request, x_api_key: str = Header()):
     _check_key(x_api_key)
+    _rate_limit(request, "cookies-write", 10, 60)
     if payload.platform not in VALID_PLATFORMS:
         raise HTTPException(400, f"Unknown platform: {payload.platform}")
     if not payload.cookies.strip():
@@ -160,7 +247,7 @@ def set_cookies(payload: CookiePayload, x_api_key: str = Header()):
     return {
         "status": "ok",
         "platform": payload.platform,
-        "synced_at": datetime.utcnow().isoformat(),
+        "synced_at": _now_utc().isoformat(),
         "cobalt_restarted": restarted,
     }
 
@@ -182,8 +269,11 @@ def list_cookies(x_api_key: str = Header()):
 
 
 @app.delete("/cookies/{platform}")
-def delete_cookies(platform: str, x_api_key: str = Header()):
+def delete_cookies(platform: str, request: Request, x_api_key: str = Header()):
     _check_key(x_api_key)
+    _rate_limit(request, "cookies-write", 10, 60)
+    if platform not in VALID_PLATFORMS:
+        raise HTTPException(400, f"Unknown platform: {platform}")
     data = _read_cookies()
     if platform in data:
         del data[platform]
@@ -202,7 +292,8 @@ def restart_cobalt(x_api_key: str = Header()):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "cookie_path": str(COOKIE_PATH), "exists": COOKIE_PATH.exists()}
+    # No store path: this endpoint is reachable through the public origin.
+    return {"status": "ok", "cookie_store_exists": COOKIE_PATH.exists()}
 
 
 # --- Premium licenses -------------------------------------------------------
@@ -223,30 +314,27 @@ PAYMENT_INFO = os.getenv(
     "Scan QRIS dengan e-wallet (GoPay/DANA/OVO) atau m-banking. "
     "Lisensi aktif otomatis setelah pembayaran terdeteksi.",
 )
-ADMIN_KEY = os.getenv("ADMIN_KEY", "change-admin-key")
 # Static GoPay merchant QRIS payload (EMVCo) converted to dynamic per order.
 STATIC_QRIS = os.getenv("STATIC_QRIS", "")
 # HMAC secret for the payment webhook (auto-activation trigger).
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 
-# Premium licenses: keys.json holds {"KEY1": {"device_id": null, "redeemed_at": null}, ...}
+# Premium licenses: {"KEY1": {"device_id": ..., "redeemed_at": ..., "expires_at": ...}}
 PREMIUM_FILE = Path(os.getenv("PREMIUM_FILE", str(COOKIE_PATH.parent / "premium-licenses.json")))
 # Purchase orders: {order_id: {device_id, package_id, status, license, created_at, paid_at}}
 ORDER_FILE = Path(os.getenv("ORDER_FILE", str(COOKIE_PATH.parent / "premium-orders.json")))
 
+# Cap on concurrently pending orders per device so /premium/order floods
+# cannot grow the stores without bound.
+MAX_PENDING_ORDERS_PER_DEVICE = 3
+
 
 def _read_licenses() -> dict:
-    if PREMIUM_FILE.exists():
-        try:
-            return json.loads(PREMIUM_FILE.read_text())
-        except (json.JSONDecodeError, OSError):
-            return {}
-    return {}
+    return _load_json_store(PREMIUM_FILE)
 
 
 def _write_licenses(data: dict):
-    PREMIUM_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PREMIUM_FILE.write_text(json.dumps(data, indent=2))
+    _atomic_write_json(PREMIUM_FILE, data)
 
 
 class RedeemPayload(BaseModel):
@@ -255,8 +343,9 @@ class RedeemPayload(BaseModel):
 
 
 @app.post("/premium/redeem")
-def premium_redeem(payload: RedeemPayload, x_api_key: str = Header()):
+def premium_redeem(payload: RedeemPayload, request: Request, x_api_key: str = Header()):
     _check_key(x_api_key)
+    _rate_limit(request, "premium-redeem", 10, 60)
     key = payload.key.strip().upper()
     device_id = payload.device_id.strip().lower()
     if not LICENSE_RE.match(key):
@@ -264,18 +353,19 @@ def premium_redeem(payload: RedeemPayload, x_api_key: str = Header()):
     if not _DEVICE_RE.match(device_id):
         raise HTTPException(400, "device_id tidak valid")
 
-    licenses = _read_licenses()
-    entry = licenses.get(key)
-    if entry is None:
-        raise HTTPException(404, "Kunci tidak dikenal")
-    if entry.get("device_id") and entry["device_id"] != device_id:
-        raise HTTPException(409, "Kunci sudah dipakai di perangkat lain")
+    with _json_lock:
+        licenses = _read_licenses()
+        entry = licenses.get(key)
+        if entry is None:
+            raise HTTPException(404, "Kunci tidak dikenal")
+        if entry.get("device_id") and entry["device_id"] != device_id:
+            raise HTTPException(409, "Kunci sudah dipakai di perangkat lain")
 
-    entry["device_id"] = device_id
-    if not entry.get("redeemed_at"):
-        entry["redeemed_at"] = datetime.utcnow().isoformat()
-    licenses[key] = entry
-    _write_licenses(licenses)
+        entry["device_id"] = device_id
+        if not entry.get("redeemed_at"):
+            entry["redeemed_at"] = _now_utc().isoformat()
+        licenses[key] = entry
+        _write_licenses(licenses)
     return {"status": "ok", "premium": True}
 
 
@@ -287,7 +377,7 @@ def _license_active(entry: dict) -> bool:
     if not expires_at:
         return True
     try:
-        return datetime.fromisoformat(expires_at) > datetime.utcnow()
+        return _parse_ts(expires_at) > _now_utc()
     except ValueError:
         return False
 
@@ -314,17 +404,11 @@ def premium_verify(payload: VerifyPayload, x_api_key: str = Header()):
 
 
 def _read_orders() -> dict:
-    if ORDER_FILE.exists():
-        try:
-            return json.loads(ORDER_FILE.read_text())
-        except (json.JSONDecodeError, OSError):
-            return {}
-    return {}
+    return _load_json_store(ORDER_FILE)
 
 
 def _write_orders(data: dict):
-    ORDER_FILE.parent.mkdir(parents=True, exist_ok=True)
-    ORDER_FILE.write_text(json.dumps(data, indent=2))
+    _atomic_write_json(ORDER_FILE, data)
 
 
 def _generate_license(licenses: dict) -> str:
@@ -351,6 +435,8 @@ def _tlv_parse(qris: str) -> list[tuple[str, str]]:
     i = 0
     while i + 4 <= len(qris):
         tag = qris[i:i + 2]
+        if not tag.isdigit() or not qris[i + 2:i + 4].isdigit():
+            raise ValueError("Malformed QRIS payload")
         length = int(qris[i + 2:i + 4])
         out.append((tag, qris[i + 4:i + 4 + length]))
         i += 4 + length
@@ -388,10 +474,13 @@ def _qris_dynamic(static_qris: str, amount: str) -> str:
         idx = next((i for i, (t, _) in enumerate(out) if t == "58"), len(out))
         out.insert(idx, ("54", amount))
     body = _tlv_build(out)
-    return body + "6304" + _crc16(body)
+    # EMVCo: CRC is calculated over the payload INCLUDING the "6304" tag and
+    # length, excluding only the 4 CRC characters themselves.
+    crc_input = body + "6304"
+    return crc_input + _crc16(crc_input)
 
 
-def _order_amount_cents(price: int, order_id: str) -> int:
+def _order_amount_cents(order_id: str) -> int:
     """Unique 1-99 cent suffix so each order's gross amount is unique and a
     single payment report can be matched to exactly one order."""
     return (int(order_id[:4], 16) % 99) + 1
@@ -412,38 +501,54 @@ def premium_packages():
 
 
 @app.post("/premium/order")
-def premium_order(payload: OrderPayload, x_api_key: str = Header()):
+def premium_order(payload: OrderPayload, request: Request, x_api_key: str = Header()):
     _check_key(x_api_key)
+    _rate_limit(request, "premium-order", 5, 60)
     device_id = payload.device_id.strip().lower()
     if not _DEVICE_RE.match(device_id):
         raise HTTPException(400, "device_id tidak valid")
     pkg = PREMIUM_PACKAGES.get(payload.package_id)
     if pkg is None:
         raise HTTPException(400, "Paket tidak dikenal")
-
-    # Reserve a fresh license bound to this device right away.
-    licenses = _read_licenses()
-    license_key = _generate_license(licenses)
-    licenses[license_key] = {"device_id": None, "redeemed_at": None}
-    _write_licenses(licenses)
+    if not STATIC_QRIS.strip():
+        raise HTTPException(503, "QRIS belum dikonfigurasi")
 
     order_id = _uuid.uuid4().hex[:16]
-    cents = _order_amount_cents(pkg["price"], order_id)
+    cents = _order_amount_cents(order_id)
     gross_amount = f"{pkg['price']}.{cents:02d}"
-    qris_payload = _qris_dynamic(STATIC_QRIS, gross_amount)
+    try:
+        qris_payload = _qris_dynamic(STATIC_QRIS, gross_amount)
+    except (ValueError, IndexError) as error:
+        raise HTTPException(503, "QRIS belum dikonfigurasi dengan benar") from error
+    if not qris_payload:
+        raise HTTPException(503, "QRIS belum dikonfigurasi dengan benar")
 
-    orders = _read_orders()
-    orders[order_id] = {
-        "device_id": device_id,
-        "package_id": payload.package_id,
-        "price": pkg["price"],
-        "gross_amount": gross_amount,
-        "status": "pending",
-        "license": license_key,
-        "created_at": datetime.utcnow().isoformat(),
-        "paid_at": None,
-    }
-    _write_orders(orders)
+    # Reserve a fresh license bound to this device right away.
+    with _json_lock:
+        licenses = _read_licenses()
+        orders = _read_orders()
+        pending = sum(
+            1 for o in orders.values()
+            if o.get("device_id") == device_id and o.get("status") == "pending"
+        )
+        if pending >= MAX_PENDING_ORDERS_PER_DEVICE:
+            raise HTTPException(
+                429, "Terlalu banyak order belum dibayar; tunggu atau selesaikan order lama",
+            )
+        license_key = _generate_license(licenses)
+        licenses[license_key] = {"device_id": None, "redeemed_at": None}
+        orders[order_id] = {
+            "device_id": device_id,
+            "package_id": payload.package_id,
+            "price": pkg["price"],
+            "gross_amount": gross_amount,
+            "status": "pending",
+            "license": license_key,
+            "created_at": _now_utc().isoformat(),
+            "paid_at": None,
+        }
+        _write_licenses(licenses)
+        _write_orders(orders)
     return {
         "order_id": order_id,
         "package_id": payload.package_id,
@@ -479,42 +584,50 @@ def premium_order_status(order_id: str, x_api_key: str = Header()):
     return result
 
 
+def _activate_order_license(licenses: dict, order: dict) -> dict:
+    """Bind an order's reserved license to its device and set expiry."""
+    entry = licenses.get(order["license"])
+    if entry is None:
+        raise HTTPException(500, "Lisensi order hilang")
+    pkg = PREMIUM_PACKAGES.get(order["package_id"])
+    if pkg is None:
+        raise HTTPException(500, "Paket order tidak dikenal")
+    entry["device_id"] = order["device_id"]
+    entry["redeemed_at"] = _now_utc().isoformat()
+    if pkg.get("days"):
+        entry["expires_at"] = (
+            _now_utc().replace(microsecond=0) + timedelta(days=pkg["days"])
+        ).isoformat()
+    else:
+        entry["expires_at"] = None
+    licenses[order["license"]] = entry
+    return entry
+
+
 class AdminConfirmPayload(BaseModel):
     admin_key: str
     order_id: str
 
 
 @app.post("/premium/admin/confirm")
-def premium_admin_confirm(payload: AdminConfirmPayload):
-    if payload.admin_key != ADMIN_KEY:
-        raise HTTPException(403, "Admin key salah")
-    orders = _read_orders()
-    order = orders.get(payload.order_id)
-    if order is None:
-        raise HTTPException(404, "Order tidak ditemukan")
-    if order["status"] == "paid":
-        return {"status": "ok", "already_paid": True}
+def premium_admin_confirm(payload: AdminConfirmPayload, request: Request):
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin", 30, 60)
+    with _json_lock:
+        orders = _read_orders()
+        order = orders.get(payload.order_id)
+        if order is None:
+            raise HTTPException(404, "Order tidak ditemukan")
+        if order["status"] == "paid":
+            return {"status": "ok", "already_paid": True}
 
-    licenses = _read_licenses()
-    entry = licenses.get(order["license"])
-    if entry is None:
-        raise HTTPException(500, "Lisensi order hilang")
-    pkg = PREMIUM_PACKAGES[order["package_id"]]
-    entry["device_id"] = order["device_id"]
-    entry["redeemed_at"] = datetime.utcnow().isoformat()
-    if pkg.get("days"):
-        entry["expires_at"] = (
-            datetime.utcnow().replace(microsecond=0)
-            + timedelta(days=pkg["days"])
-        ).isoformat()
-    else:
-        entry["expires_at"] = None
-    licenses[order["license"]] = entry
-    _write_licenses(licenses)
+        licenses = _read_licenses()
+        _activate_order_license(licenses, order)
+        _write_licenses(licenses)
 
-    order["status"] = "paid"
-    order["paid_at"] = datetime.utcnow().isoformat()
-    _write_orders(orders)
+        order["status"] = "paid"
+        order["paid_at"] = _now_utc().isoformat()
+        _write_orders(orders)
     return {"status": "ok", "paid": True}
 
 
@@ -523,9 +636,9 @@ class AdminListPayload(BaseModel):
 
 
 @app.post("/premium/admin/orders")
-def premium_admin_orders(payload: AdminListPayload):
-    if payload.admin_key != ADMIN_KEY:
-        raise HTTPException(403, "Admin key salah")
+def premium_admin_orders(payload: AdminListPayload, request: Request):
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin", 30, 60)
     orders = _read_orders()
     pending = [
         {"order_id": oid, "package_id": o["package_id"],
@@ -533,10 +646,6 @@ def premium_admin_orders(payload: AdminListPayload):
         for oid, o in orders.items() if o["status"] == "pending"
     ]
     return {"pending": pending}
-
-
-import hashlib
-import hmac as _hmac
 
 
 class PaymentWebhookPayload(BaseModel):
@@ -547,14 +656,23 @@ class PaymentWebhookPayload(BaseModel):
     signature: str  # HMAC-SHA256(order_id|gross_amount, WEBHOOK_SECRET)
 
 
+def _order_recent(order: dict, max_age_hours: int = 48) -> bool:
+    """Whether an order is fresh enough for amount-based webhook matching."""
+    try:
+        return _now_utc() - _parse_ts(order["created_at"]) < timedelta(hours=max_age_hours)
+    except (KeyError, ValueError, TypeError):
+        return False
+
+
 @app.post("/premium/webhook")
-def premium_webhook(payload: PaymentWebhookPayload):
+def premium_webhook(payload: PaymentWebhookPayload, request: Request):
     """Payment-notification endpoint for auto-activation. Any detection
     source (Midtrans relay, GoPay merchant watcher, manual script) posts
     here; the matching pending order is marked paid and its license
     activated. Signature: HMAC-SHA256 over 'order_id|gross_amount'."""
     if not WEBHOOK_SECRET:
         raise HTTPException(503, "Webhook belum dikonfigurasi")
+    _rate_limit(request, "premium-webhook", 60, 60)
     msg = f"{payload.order_id or ''}|{payload.gross_amount or ''}"
     expected = _hmac.new(
         WEBHOOK_SECRET.encode(), msg.encode(), hashlib.sha256
@@ -564,41 +682,36 @@ def premium_webhook(payload: PaymentWebhookPayload):
     if payload.status.lower() not in {"settlement", "paid", "success"}:
         return {"status": "ignored", "reason": payload.status}
 
-    orders = _read_orders()
-    order = None
-    order_id = None
-    if payload.order_id and payload.order_id in orders:
-        order_id = payload.order_id
-        order = orders[order_id]
-    elif payload.gross_amount:
-        for oid, o in orders.items():
-            if o["status"] == "pending" and o.get("gross_amount") == payload.gross_amount:
-                order_id, order = oid, o
-                break
-    if order is None:
-        raise HTTPException(404, "Order tidak ditemukan")
-    if order["status"] == "paid":
-        return {"status": "ok", "already_paid": True, "order_id": order_id}
+    with _json_lock:
+        orders = _read_orders()
+        order = None
+        order_id = None
+        if payload.order_id and payload.order_id in orders:
+            order_id = payload.order_id
+            order = orders[order_id]
+            # A signed report whose amount contradicts the order is a relay
+            # bug, not a payment for this order.
+            if payload.gross_amount and not _amounts_match(payload.gross_amount, order.get("gross_amount")):
+                raise HTTPException(409, "Jumlah pembayaran tidak cocok dengan order")
+        elif payload.gross_amount:
+            # Amount fallback: cents suffix makes amounts unique; only match
+            # fresh orders so stale/reused amounts cannot hijack a payment.
+            for oid, o in orders.items():
+                if (o["status"] == "pending" and _order_recent(o)
+                        and _amounts_match(o.get("gross_amount"), payload.gross_amount)):
+                    order_id, order = oid, o
+                    break
+        if order is None:
+            raise HTTPException(404, "Order tidak ditemukan")
+        if order["status"] == "paid":
+            return {"status": "ok", "already_paid": True, "order_id": order_id}
 
-    licenses = _read_licenses()
-    entry = licenses.get(order["license"])
-    if entry is None:
-        raise HTTPException(500, "Lisensi order hilang")
-    pkg = PREMIUM_PACKAGES[order["package_id"]]
-    entry["device_id"] = order["device_id"]
-    entry["redeemed_at"] = datetime.utcnow().isoformat()
-    if pkg.get("days"):
-        entry["expires_at"] = (
-            datetime.utcnow().replace(microsecond=0)
-            + timedelta(days=pkg["days"])
-        ).isoformat()
-    else:
-        entry["expires_at"] = None
-    licenses[order["license"]] = entry
-    _write_licenses(licenses)
+        licenses = _read_licenses()
+        _activate_order_license(licenses, order)
+        _write_licenses(licenses)
 
-    order["status"] = "paid"
-    order["paid_at"] = datetime.utcnow().isoformat()
-    orders[order_id] = order
-    _write_orders(orders)
+        order["status"] = "paid"
+        order["paid_at"] = _now_utc().isoformat()
+        orders[order_id] = order
+        _write_orders(orders)
     return {"status": "ok", "paid": True, "order_id": order_id}

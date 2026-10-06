@@ -5,6 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=anrsaver
+Group=anrsaver
+UMask=0077
 WorkingDirectory=/opt/anrsaver/server
 EnvironmentFile=/opt/anrsaver/.env
 ExecStart=/opt/anrsaver/venv/bin/uvicorn cookie_sync:app --host 127.0.0.1 --port 9005

@@ -5,6 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=anrsaver
+Group=anrsaver
+UMask=0077
 WorkingDirectory=/opt/anrsaver/server
 EnvironmentFile=/opt/anrsaver/.env
 # deno (in /usr/local/bin) must be on PATH so yt-dlp's EJS solver can run

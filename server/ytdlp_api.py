@@ -12,22 +12,28 @@ Endpoints:
   GET  /health - Health check
 """
 
+import hashlib
+import hmac
 import html
 import ipaddress
 import json
 import mimetypes
 import os
+import re
 import shutil
+import socket
 import subprocess
 import sys
+import threading
+import time
 import uuid
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, Request as URLRequest, build_opener
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -36,6 +42,8 @@ app = FastAPI(title="yt-dlp API", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 API_KEY = os.getenv("API_KEY", "change-me")
+if API_KEY in {"", "change-me"}:
+    raise RuntimeError("API_KEY must be set to a strong secret in the environment")
 DOWNLOAD_DIR = Path(os.getenv("DOWNLOAD_DIR", "/tmp/ytdlp-downloads"))
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
@@ -103,12 +111,31 @@ class VideoRequest(BaseModel):
 
 
 def _check_key(x_api_key: str = Header()):
-    if x_api_key != API_KEY:
+    if not hmac.compare_digest(x_api_key, API_KEY):
         raise HTTPException(401, "Invalid API key")
 
 
+_rate_lock = threading.Lock()
+_rate_hits: dict = {}
+
+
+def _rate_limit(request: Request, scope: str, limit: int, window_seconds: int):
+    """Fixed-window per-IP limiter (uvicorn trusts X-Forwarded-For from the
+    localhost Caddy proxy). Shared key in the APK makes per-IP the only
+    meaningful dimension."""
+    client_ip = request.client.host if request.client else "unknown"
+    bucket_key = f"{scope}:{client_ip}"
+    now = time.monotonic()
+    with _rate_lock:
+        recent = [t for t in _rate_hits.get(bucket_key, []) if now - t < window_seconds]
+        if len(recent) >= limit:
+            raise HTTPException(429, "Terlalu banyak permintaan, coba lagi nanti")
+        recent.append(now)
+        _rate_hits[bucket_key] = recent
+
+
 def _run_ytdlp(args: list, timeout: int = 30) -> dict:
-    cmd = [YTDLP_BIN, "--no-warnings", "--no-check-certificates"] + args
+    cmd = [YTDLP_BIN, "--no-warnings"] + args
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=timeout,
@@ -159,7 +186,8 @@ def _classify_error(message: str) -> str:
 
 
 def _error_response(error: Exception, error_type: str = None):
-    message = str(error)
+    # Truncate: yt-dlp stderr can be huge and may contain internal paths.
+    message = str(error)[:500]
     return JSONResponse(
         status_code=500,
         content={"detail": message, "errorType": error_type or _classify_error(message)},
@@ -358,14 +386,27 @@ def _validate_source_url(url: str):
         host = parsed.hostname
         if parsed.scheme not in {"http", "https"} or not host or parsed.username or parsed.password:
             raise ValueError
-        if host.lower().rstrip(".") == "localhost":
+        normalized = host.lower().rstrip(".")
+        if normalized == "localhost" or normalized.isdigit():
+            # "2130706433" is not an ipaddress literal but resolvers treat it
+            # as 127.0.0.1; reject numeric hosts outright.
             raise ValueError
         try:
-            address = ipaddress.ip_address(host)
+            address = ipaddress.ip_address(normalized)
         except ValueError:
             address = None
         if address and not address.is_global:
             raise ValueError
+        if address is None:
+            # A name that resolves to any non-global IP (DNS rebinding,
+            # /etc/hosts tricks, cloud metadata names) is not a media host.
+            try:
+                resolved = socket.getaddrinfo(normalized, None)
+            except socket.gaierror as error:
+                raise ValueError from error
+            for info in resolved:
+                if not ipaddress.ip_address(info[4][0]).is_global:
+                    raise ValueError
     except ValueError as error:
         raise ValueError("Only public HTTP(S) URLs are supported") from error
 
@@ -400,7 +441,7 @@ class _ThreadsRedirect(HTTPRedirectHandler):
 
 def _extract_threads(url: str) -> dict:
     _validate_threads_url(url)
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0 EL-Saver/1.0"})
+    request = URLRequest(url, headers={"User-Agent": "Mozilla/5.0 EL-Saver/1.0"})
     try:
         response = build_opener(_ThreadsRedirect).open(request, timeout=THREADS_TIMEOUT)
         content_length = int(response.headers.get("Content-Length", "0"))
@@ -436,8 +477,9 @@ def _threads_info(data: dict) -> dict:
 
 
 @app.post("/info")
-def get_info(req: VideoRequest, x_api_key: str = Header()):
+def get_info(req: VideoRequest, request: Request, x_api_key: str = Header()):
     _check_key(x_api_key)
+    _rate_limit(request, "info", 40, 60)
 
     try:
         _validate_source_url(req.url)
@@ -457,9 +499,10 @@ def get_info(req: VideoRequest, x_api_key: str = Header()):
 
 
 @app.post("/download")
-def get_download(req: VideoRequest, x_api_key: str = Header()):
+def get_download(req: VideoRequest, request: Request, x_api_key: str = Header()):
     """Extract direct download URL or download and serve file"""
     _check_key(x_api_key)
+    _rate_limit(request, "download", 20, 60)
 
     try:
         _validate_source_url(req.url)
@@ -481,6 +524,9 @@ def get_download(req: VideoRequest, x_api_key: str = Header()):
             return _download_audio(req.url)
 
         height = req.quality.replace("p", "")
+        # height goes into the yt-dlp format spec; only plain numbers allowed.
+        if not re.fullmatch(r"\d{3,4}", height):
+            return _error_response(Exception(f"Invalid quality: {req.quality}"), "unavailable")
 
         # YouTube's googlevideo URLs are locked to the extractor's IP, so a
         # redirect would be unfetchable from the user's device. Download on the
@@ -521,21 +567,14 @@ def get_download(req: VideoRequest, x_api_key: str = Header()):
         return _error_response(e)
 
 
-def _download_merged(url: str, height: str) -> dict:
-    """Download (merging if needed) and serve the resulting file."""
-    format_spec = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
-
-    # Unique basename WITHOUT pre-creating the file: yt-dlp treats an existing
-    # empty target as "already downloaded" and skips it, leaving a 0-byte file.
+def _download_and_serve(url: str, fmt_args: list, fallback_glob: str,
+                        served_ext: str, default_title: str, empty_error: str) -> dict:
+    """Run yt-dlp with a unique output token, then serve the file via /files."""
     token = uuid.uuid4().hex
     out_tmpl = str(DOWNLOAD_DIR / f"{token}.%(ext)s")
-
     try:
-        # Single print with a unique separator so title vs path never get
-        # confused (their print phases differ, so line order isn't stable).
         result = _run_ytdlp([
-            "-f", format_spec,
-            "--merge-output-format", "mp4",
+            *fmt_args,
             "-o", out_tmpl,
             "--no-playlist",
             "--print", "after_move:%(title)s|@@|%(filepath)s",
@@ -545,65 +584,64 @@ def _download_merged(url: str, height: str) -> dict:
 
         out = result["stdout"].strip()
         title, _, path_str = out.rpartition("|@@|")
-        title = title.strip() or "video"
+        title = title.strip() or default_title
         final_path = Path(path_str.strip()) if path_str.strip() else None
 
         if not final_path or not final_path.exists() or final_path.stat().st_size == 0:
             # Fallback: locate any file we wrote for this token
-            matches = list(DOWNLOAD_DIR.glob(f"{token}.*"))
-            matches = [m for m in matches if m.stat().st_size > 0]
+            matches = [m for m in DOWNLOAD_DIR.glob(fallback_glob.format(token=token))
+                       if m.stat().st_size > 0]
             if not matches:
-                raise Exception("Download failed: empty or missing output")
+                raise Exception(empty_error)
             final_path = matches[0]
 
         return _download_response(
-            "tunnel", f"/files/{final_path.name}", title, f"{title}.mp4",
+            "tunnel", f"/files/{final_path.name}", title, f"{title}{served_ext}",
         )
     except Exception:
         for m in DOWNLOAD_DIR.glob(f"{token}.*"):
             m.unlink(missing_ok=True)
         raise
+
+
+def _download_merged(url: str, height: str) -> dict:
+    """Download (merging if needed) and serve the resulting file."""
+    format_spec = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
+    return _download_and_serve(
+        url,
+        ["-f", format_spec, "--merge-output-format", "mp4"],
+        fallback_glob="{token}.*",
+        served_ext=".mp4",
+        default_title="video",
+        empty_error="Download failed: empty or missing output",
+    )
 
 
 def _download_audio(url: str) -> dict:
     """Extract audio to MP3 server-side and serve the file."""
-    token = uuid.uuid4().hex
-    out_tmpl = str(DOWNLOAD_DIR / f"{token}.%(ext)s")
-    try:
-        result = _run_ytdlp([
-            "-f", "bestaudio/best",
-            "--extract-audio", "--audio-format", "mp3", "--audio-quality", "0",
-            "-o", out_tmpl,
-            "--no-playlist",
-            "--print", "after_move:%(title)s|@@|%(filepath)s",
-            *_cookie_args(url),
-            url,
-        ], timeout=180)
+    return _download_and_serve(
+        url,
+        ["-f", "bestaudio/best", "--extract-audio",
+         "--audio-format", "mp3", "--audio-quality", "0"],
+        fallback_glob="{token}.mp3",
+        served_ext=".mp3",
+        default_title="audio",
+        empty_error="Audio extraction failed: empty output",
+    )
 
-        out = result["stdout"].strip()
-        title, _, path_str = out.rpartition("|@@|")
-        title = title.strip() or "audio"
-        final_path = Path(path_str.strip()) if path_str.strip() else None
 
-        if not final_path or not final_path.exists() or final_path.stat().st_size == 0:
-            matches = [m for m in DOWNLOAD_DIR.glob(f"{token}.mp3")
-                       if m.stat().st_size > 0]
-            if not matches:
-                raise Exception("Audio extraction failed: empty output")
-            final_path = matches[0]
-
-        return _download_response(
-            "tunnel", f"/files/{final_path.name}", title, f"{title}.mp3",
-        )
-    except Exception:
-        for m in DOWNLOAD_DIR.glob(f"{token}.*"):
-            m.unlink(missing_ok=True)
-        raise
+# yt-dlp outputs are always written under a uuid token in DOWNLOAD_DIR; the
+# whitelist keeps /files from serving anything else.
+_SERVED_FILE_RE = re.compile(r"^[0-9a-f]{32}\.(mp4|mp3|mkv|webm|m4a|opus|mov)$")
 
 
 @app.get("/files/{filename}")
 def serve_file(filename: str):
-    filepath = DOWNLOAD_DIR / filename
+    if not _SERVED_FILE_RE.fullmatch(filename):
+        raise HTTPException(404, "File not found")
+    filepath = (DOWNLOAD_DIR / filename).resolve()
+    if not filepath.is_relative_to(DOWNLOAD_DIR.resolve()):
+        raise HTTPException(404, "File not found")
     if not filepath.exists() or filepath.stat().st_size == 0:
         raise HTTPException(404, "File not found")
     media = "audio/mpeg" if filename.lower().endswith(".mp3") else "video/mp4"

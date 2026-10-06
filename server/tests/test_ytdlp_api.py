@@ -1,14 +1,27 @@
 import json
+import os
+import socket
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+os.environ.setdefault("API_KEY", "test-api-key")
+
 SERVER_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIR))
 
 import ytdlp_api
+
+_GLOBAL_DNS = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+
+def _req(ip: str = "10.8.0.1"):
+    """Minimal FastAPI Request stub so endpoint functions are callable directly."""
+    return ytdlp_api.Request(
+        scope={"type": "http", "client": (ip, 50000), "headers": []},
+    )
 
 
 THREADS_HTML = """
@@ -61,8 +74,9 @@ class ErrorClassifierTests(unittest.TestCase):
 
     def test_endpoint_error_keeps_status_and_detail_and_adds_type(self):
         req = ytdlp_api.VideoRequest(url="https://youtube.com/watch?v=x")
-        with patch.object(ytdlp_api, "_run_ytdlp", side_effect=Exception("Video unavailable")):
-            response = ytdlp_api.get_info(req, ytdlp_api.API_KEY)
+        with patch.object(ytdlp_api, "_run_ytdlp", side_effect=Exception("Video unavailable")), \
+             patch("socket.getaddrinfo", return_value=_GLOBAL_DNS):
+            response = ytdlp_api.get_info(req, _req(), ytdlp_api.API_KEY)
         self.assertEqual(response.status_code, 500)
         body = json.loads(response.body)
         self.assertEqual(body["detail"], "Video unavailable")
@@ -71,8 +85,9 @@ class ErrorClassifierTests(unittest.TestCase):
 
 class SourceValidationTests(unittest.TestCase):
     def test_accepts_only_public_http_source_urls(self):
-        ytdlp_api._validate_source_url("https://example.com/video")
-        ytdlp_api._validate_source_url("http://example.com/video")
+        with patch("socket.getaddrinfo", return_value=_GLOBAL_DNS):
+            ytdlp_api._validate_source_url("https://example.com/video")
+            ytdlp_api._validate_source_url("http://example.com/video")
         for url in (
             "file:///etc/passwd",
             "https://user:pass@example.com/video",
@@ -80,10 +95,22 @@ class SourceValidationTests(unittest.TestCase):
             "https://localhost./video",
             "https://127.0.0.1/video",
             "https://[::1]/video",
+            "http://2130706433/",
             "not a url",
         ):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 ytdlp_api._validate_source_url(url)
+
+    def test_hostname_resolving_to_private_ip_is_rejected(self):
+        private_dns = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))]
+        with patch("socket.getaddrinfo", return_value=private_dns):
+            with self.assertRaises(ValueError):
+                ytdlp_api._validate_source_url("https://rebind.example/video")
+
+    def test_unresolvable_hostname_is_rejected(self):
+        with patch("socket.getaddrinfo", side_effect=socket.gaierror(1, "Name unknown")):
+            with self.assertRaises(ValueError):
+                ytdlp_api._validate_source_url("https://nx.example/video")
 
 
 class CookieRoutingTests(unittest.TestCase):
@@ -170,8 +197,9 @@ class MetadataTests(unittest.TestCase):
     def test_direct_download_reports_selected_extension(self):
         req = ytdlp_api.VideoRequest(url="https://example.com/video", quality="720")
         output = "https://cdn.example/video.webm|@@|clip|@@|webm\n"
-        with patch.object(ytdlp_api, "_run_ytdlp", return_value={"stdout": output}):
-            response = ytdlp_api.get_download(req, ytdlp_api.API_KEY)
+        with patch.object(ytdlp_api, "_run_ytdlp", return_value={"stdout": output}), \
+             patch("socket.getaddrinfo", return_value=_GLOBAL_DNS):
+            response = ytdlp_api.get_download(req, _req(), ytdlp_api.API_KEY)
         self.assertEqual(response["filename"], "clip.webm")
         self.assertEqual(response["extension"], ".webm")
         self.assertEqual(response["contentType"], "video/webm")
@@ -181,19 +209,27 @@ class MetadataTests(unittest.TestCase):
         output = "https://cdn.example/video\nhttps://cdn.example/audio|@@|clip|@@|mp4\n"
         expected = {"status": "tunnel"}
         with patch.object(ytdlp_api, "_run_ytdlp", return_value={"stdout": output}), \
-             patch.object(ytdlp_api, "_download_merged", return_value=expected):
-            response = ytdlp_api.get_download(req, ytdlp_api.API_KEY)
+             patch.object(ytdlp_api, "_download_merged", return_value=expected), \
+             patch("socket.getaddrinfo", return_value=_GLOBAL_DNS):
+            response = ytdlp_api.get_download(req, _req(), ytdlp_api.API_KEY)
         self.assertEqual(response, expected)
+
+    def test_invalid_quality_is_typed_unavailable(self):
+        req = ytdlp_api.VideoRequest(url="https://example.com/video", quality="9;9")
+        response = ytdlp_api.get_download(req, _req(), ytdlp_api.API_KEY)
+        body = json.loads(response.body)
+        self.assertEqual(body["errorType"], "unavailable")
 
 
 class ThreadsExtractorTests(unittest.TestCase):
     def test_validates_public_threads_hosts_at_url_boundary(self):
-        for url in (
-            "https://threads.net/@u/post/abc",
-            "https://www.threads.com/@u/post/abc",
-            "https://threads.net/@u/t/abc",
-        ):
-            ytdlp_api._validate_threads_url(url)
+        with patch("socket.getaddrinfo", return_value=_GLOBAL_DNS):
+            for url in (
+                "https://threads.net/@u/post/abc",
+                "https://www.threads.com/@u/post/abc",
+                "https://threads.net/@u/t/abc",
+            ):
+                ytdlp_api._validate_threads_url(url)
         for url in (
             "http://threads.net/@u/post/abc",
             "https://threads.net.evil.test/@u/post/abc",
@@ -288,7 +324,7 @@ class ThreadsExtractorTests(unittest.TestCase):
         parsed = ytdlp_api._parse_threads_html(THREADS_HTML)
         with patch.object(ytdlp_api, "_extract_threads", return_value=parsed), \
              patch.object(ytdlp_api, "_run_ytdlp") as run_ytdlp:
-            response = ytdlp_api.get_info(req, ytdlp_api.API_KEY)
+            response = ytdlp_api.get_info(req, _req(), ytdlp_api.API_KEY)
         run_ytdlp.assert_not_called()
         self.assertEqual(response["status"], "ok")
         self.assertEqual(response["formats"][0]["extension"], ".mp4")
@@ -303,7 +339,7 @@ class ThreadsExtractorTests(unittest.TestCase):
         )
         parsed = ytdlp_api._parse_threads_html(THREADS_HTML)
         with patch.object(ytdlp_api, "_extract_threads", return_value=parsed):
-            response = ytdlp_api.get_download(req, ytdlp_api.API_KEY)
+            response = ytdlp_api.get_download(req, _req(), ytdlp_api.API_KEY)
         self.assertEqual(response["url"], "https://cdn.example/thumb.jpg")
         self.assertEqual(response["mediaKind"], "image")
 
@@ -311,7 +347,7 @@ class ThreadsExtractorTests(unittest.TestCase):
         req = ytdlp_api.VideoRequest(url="https://threads.com/@u/post/abc")
         parsed = ytdlp_api._parse_threads_html(THREADS_HTML)
         with patch.object(ytdlp_api, "_extract_threads", return_value=parsed):
-            response = ytdlp_api.get_download(req, ytdlp_api.API_KEY)
+            response = ytdlp_api.get_download(req, _req(), ytdlp_api.API_KEY)
         self.assertEqual(response["status"], "redirect")
         self.assertEqual(response["url"], "https://cdn.example/video.mp4")
         self.assertEqual(response["mediaKind"], "video")
@@ -323,14 +359,14 @@ class ThreadsExtractorTests(unittest.TestCase):
         )
         parsed = ytdlp_api._parse_threads_html(THREADS_HTML)
         with patch.object(ytdlp_api, "_extract_threads", return_value=parsed):
-            response = ytdlp_api.get_download(req, ytdlp_api.API_KEY)
+            response = ytdlp_api.get_download(req, _req(), ytdlp_api.API_KEY)
         body = json.loads(response.body)
         self.assertEqual(body["errorType"], "unavailable")
 
     def test_threads_fetch_failure_is_typed_temporarily_unavailable(self):
         req = ytdlp_api.VideoRequest(url="https://threads.net/@u/post/abc")
         with patch.object(ytdlp_api, "_extract_threads", side_effect=Exception("Threads fetch failed")):
-            response = ytdlp_api.get_info(req, ytdlp_api.API_KEY)
+            response = ytdlp_api.get_info(req, _req(), ytdlp_api.API_KEY)
         body = json.loads(response.body)
         self.assertEqual(response.status_code, 500)
         self.assertEqual(body["errorType"], "temporarily-unavailable")

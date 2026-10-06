@@ -32,11 +32,28 @@ cp -f "$SELF_DIR"/*.py "$SELF_DIR/requirements.txt" "$SELF_DIR/docker-compose.ym
 # cookies.json must exist as a FILE before docker mounts it (else docker makes a dir)
 [[ -f "$APP_DIR/cookies.json" ]] || echo '{}' > "$APP_DIR/cookies.json"
 
+echo ">> Service user (both API services run unprivileged)..."
+id -u anrsaver &>/dev/null || useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin anrsaver
+chown -R anrsaver:anrsaver "$APP_DIR/cookies" "$APP_DIR/downloads"
+[[ -f "$APP_DIR/cookies.json" ]] && chown anrsaver:anrsaver "$APP_DIR/cookies.json"
+chown anrsaver:anrsaver "$APP_DIR"/premium-*.json 2>/dev/null || true
+
 echo ">> Config (.env)..."
 if [[ ! -f "$APP_DIR/.env" ]]; then
   cp "$SELF_DIR/.env.example" "$APP_DIR/.env"
-  echo "   -> created $APP_DIR/.env (edit API_KEY if needed)"
+  echo "   -> created $APP_DIR/.env (fill API_KEY, ADMIN_KEY, WEBHOOK_SECRET, STATIC_QRIS)"
 fi
+# Generate missing secrets so the services' fail-loud checks pass.
+if ! grep -q '^ADMIN_KEY=' "$APP_DIR/.env" 2>/dev/null; then
+  echo "ADMIN_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >> "$APP_DIR/.env"
+  echo "   -> generated ADMIN_KEY"
+fi
+if ! grep -q '^WEBHOOK_SECRET=' "$APP_DIR/.env" 2>/dev/null; then
+  echo "WEBHOOK_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >> "$APP_DIR/.env"
+  echo "   -> generated WEBHOOK_SECRET (share it with your payment webhook relay)"
+fi
+chown root:anrsaver "$APP_DIR/.env"
+chmod 640 "$APP_DIR/.env"
 
 echo ">> Python venv + deps..."
 [[ -d "$APP_DIR/venv" ]] || python3 -m venv "$APP_DIR/venv"
