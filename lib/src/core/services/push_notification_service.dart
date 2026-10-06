@@ -51,7 +51,6 @@ class PushNotificationService {
       if (kDebugMode && token != null) {
         developer.log('FCM token: $token', name: 'PushNotification');
       }
-      messaging.onTokenRefresh.listen((_) {});
       _initialized = true;
       developer.log('FCM initialized', name: 'PushNotification');
     } catch (e) {

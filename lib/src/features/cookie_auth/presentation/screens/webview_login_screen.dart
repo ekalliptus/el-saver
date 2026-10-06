@@ -21,21 +21,36 @@ class WebViewLoginScreen extends StatefulWidget {
 }
 
 class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
-  late final WebViewController _controller;
-  late final PlatformLoginConfig _config;
+  WebViewController? _controller;
+  PlatformLoginConfig? _config;
   final CookieExtractionService _extractionService = CookieExtractionService();
   bool _loading = true;
   bool _extracted = false;
   bool _extracting = false;
   String _statusText = "Menunggu login...";
 
-  bool get _isManual => _config.manualCompletion;
+  bool get _isManual => _config?.manualCompletion ?? false;
 
   @override
   void initState() {
     super.initState();
-    _config = PlatformLoginConfig.getConfig(widget.platform)!;
-    if (_config.manualCompletion) {
+    // The error classifier can name platforms (threads, bilibili) that have
+    // no login config; bail out gracefully instead of crashing.
+    _config = PlatformLoginConfig.getConfig(widget.platform);
+    final config = _config;
+    if (config == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text("Login ${widget.platform.name} belum didukung di aplikasi."),
+          backgroundColor: AppColors.red,
+        ));
+        Navigator.of(context).pop(false);
+      });
+      return;
+    }
+    if (config.manualCompletion) {
       _statusText = "Login di halaman ini, lalu tekan tombol 'Selesai Login'.";
     }
 
@@ -61,14 +76,14 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
         },
         onPageStarted: (url) {
           if (mounted) setState(() => _loading = true);
-          if (!_config.manualCompletion) _onUrlChanged(url);
+          if (!_isManual) _onUrlChanged(url);
         },
         onPageFinished: (url) {
           if (mounted) setState(() => _loading = false);
-          if (!_config.manualCompletion) _tryExtractCookies("pageFinished");
+          if (!_isManual) _tryExtractCookies("pageFinished");
         },
         onUrlChange: (change) {
-          if (change.url != null && !_config.manualCompletion) {
+          if (change.url != null && !_isManual) {
             _onUrlChanged(change.url!);
           }
         },
@@ -77,24 +92,25 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
           // because login might have succeeded before the redirect timed out.
           // Bilibili's post-login redirect to bstar:// surfaces here as
           // ERR_UNKNOWN_URL_SCHEME on some WebView builds.
-          if (!_config.manualCompletion) {
+          if (!_isManual) {
             _tryExtractCookies("webError: ${error.description}");
-          } else if (_isManual && !_extracted) {
+          } else if (!_extracted) {
             _tryExtractCookies("webError: ${error.description}");
           }
         },
       ))
-      ..setUserAgent(_config.userAgent ??
+      ..setUserAgent(config.userAgent ??
           "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-      ..loadRequest(Uri.parse(_config.loginUrl));
+      ..loadRequest(Uri.parse(config.loginUrl));
   }
 
   void _onUrlChanged(String url) {
-    if (_extracted) return;
+    final config = _config;
+    if (_extracted || config == null) return;
     final uri = Uri.tryParse(url);
     if (uri == null) return;
 
-    final isSuccessPage = _config.successDomains.any(
+    final isSuccessPage = config.successDomains.any(
       (domain) => uri.host == domain || uri.host.endsWith(".$domain"),
     );
 
@@ -110,12 +126,15 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
   }
 
   Future<void> _tryExtractCookies(String trigger) async {
-    if (_extracted || _extracting) return;
+    final controller = _controller;
+    if (_config == null || controller == null || _extracted || _extracting) {
+      return;
+    }
     _extracting = true;
 
     try {
       final cookies = await _extractionService.extractCookies(
-        _controller,
+        controller,
         widget.platform,
       );
 
@@ -159,6 +178,13 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final config = _config;
+    final controller = _controller;
+    if (config == null || controller == null) {
+      // Unsupported platform: brief placeholder while the post-frame callback
+      // pops this route.
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final cardColor = theme.cardColor;
@@ -188,7 +214,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
               onPressed: () => Navigator.of(context).pop(false),
             ),
             title: Text(
-              "Login ${_config.name}",
+              "Login ${config.name}",
               style: TextStyle(color: fgColor, fontSize: 16),
             ),
             actions: [
@@ -217,7 +243,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
           ),
           body: Column(
             children: [
-              Expanded(child: WebViewWidget(controller: _controller)),
+              Expanded(child: WebViewWidget(controller: controller)),
               Container(
                 width: double.infinity,
                 padding:

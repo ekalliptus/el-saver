@@ -27,6 +27,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
   String? _loadError;
   OrderInfo? _order;
   bool _creating = false;
+  bool _settled = false;
   Timer? _pollTimer;
 
   @override
@@ -88,7 +89,8 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
       }
       try {
         final status = await _premium.pollOrder(_order!.orderId);
-        if (status == 'paid' && mounted) {
+        if (status == 'paid' && mounted && !_settled) {
+          _settled = true;
           timer.cancel();
           buildToast(
             msg: 'Pembayaran terkonfirmasi! Premium aktif 🎉',
@@ -105,14 +107,15 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
   Future<void> _checkNow() async {
     try {
       final status = await _premium.pollOrder(_order!.orderId);
-      if (status == 'paid' && mounted) {
+      if (status == 'paid' && mounted && !_settled) {
+        _settled = true;
         _pollTimer?.cancel();
         buildToast(
           msg: 'Pembayaran terkonfirmasi! Premium aktif 🎉',
           type: ToastType.success,
         );
         Navigator.of(context).pop(true);
-      } else {
+      } else if (!_settled) {
         buildToast(
           msg: 'Belum terkonfirmasi. Kami terus memeriksa otomatis.',
           type: ToastType.info,

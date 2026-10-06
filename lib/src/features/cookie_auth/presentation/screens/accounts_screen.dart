@@ -56,9 +56,12 @@ class AccountsScreen extends StatelessWidget {
             ));
           }
           if (state is LogoutSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text("Logout berhasil"),
-              backgroundColor: AppColors.primaryColor,
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(state.serverSynced
+                  ? "Logout berhasil"
+                  : "Logout lokal berhasil, tapi server belum konfirmasi. Coba logout lagi nanti."),
+              backgroundColor:
+                  state.serverSynced ? AppColors.primaryColor : Colors.orange,
             ));
           }
         },
@@ -109,10 +112,35 @@ class AccountsScreen extends StatelessWidget {
                       context.read<AccountBloc>().add(LoadAccounts());
                     }
                   },
-                  onLogout: () {
-                    context
-                        .read<AccountBloc>()
-                        .add(LogoutFromPlatform(config.platform));
+                  onLogout: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: Text('Logout dari ${config.name}?'),
+                        content: const Text(
+                          'Sesi login akan dihapus dari perangkat ini dan '
+                          'server. Video yang sudah terunduh tidak terhapus.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, false),
+                            child: const Text('Batal'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dialogContext, true),
+                            style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.red),
+                            child: const Text('Logout'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true && context.mounted) {
+                      context
+                          .read<AccountBloc>()
+                          .add(LogoutFromPlatform(config.platform));
+                    }
                   },
                 );
               }),

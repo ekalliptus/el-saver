@@ -130,15 +130,6 @@ class DownloaderVideoPaused extends DownloaderState {
   List<Object?> get props => [path];
 }
 
-class DownloaderVideoResumed extends DownloaderState {
-  final String path;
-
-  const DownloaderVideoResumed({required this.path});
-
-  @override
-  List<Object?> get props => [path];
-}
-
 class DownloaderVideoDeleted extends DownloaderState {
   final String path;
 

@@ -4,11 +4,6 @@ abstract class AccountEvent {}
 
 class LoadAccounts extends AccountEvent {}
 
-class LoginToPlatform extends AccountEvent {
-  final SocialPlatform platform;
-  LoginToPlatform(this.platform);
-}
-
 class CookiesExtracted extends AccountEvent {
   final SocialPlatform platform;
   final Map<String, String> cookies;

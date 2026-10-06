@@ -62,7 +62,9 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
     add(LoadAccounts());
 
     final synced = await cookieRepo.syncToServer(cookie);
-    if (synced) {
+    // The webview route pops (and closes this bloc) as soon as the first
+    // LoginSuccess lands; the bloc may already be closed here.
+    if (synced && !isClosed) {
       emit(LoginSuccess(platform: event.platform, synced: true));
     }
   }
@@ -72,8 +74,8 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
     Emitter<AccountState> emit,
   ) async {
     await cookieRepo.deleteCookies(event.platform);
-    await cookieRepo.deleteFromServer(event.platform);
-    emit(LogoutSuccess(event.platform));
+    final serverDeleted = await cookieRepo.deleteFromServer(event.platform);
+    emit(LogoutSuccess(event.platform, serverSynced: serverDeleted));
     add(LoadAccounts());
   }
 }

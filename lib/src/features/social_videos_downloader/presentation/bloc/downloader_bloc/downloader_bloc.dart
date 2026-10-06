@@ -149,6 +149,10 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
     final platform = DownloadItem.detectPlatform(event.video.srcUrl);
     final videoTitle = _extractVideoTitle(event.video.title);
 
+    // Reject a duplicate tap on the same file while its download is active;
+    // a second CancelToken would orphan the first request.
+    if (_cancelTokens.containsKey(path)) return;
+
     DownloadItem item = DownloadItem(
       video: event.video,
       selectedLink: selectedLink,
@@ -161,8 +165,7 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
       downloadTime: DateTime.now(),
     );
 
-    int index = _checkIfItemIsExistInDownloads(item);
-    _addItem(index, item);
+    _upsertItemByPath(item);
     await _saveDownloadHistory();
     emit(const DownloaderSaveVideoLoading());
 
@@ -184,12 +187,16 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
         double progress = (received / total) * 100;
         progress = progress.clamp(1.0, 99.0);
 
-        _updateItem(
-            index,
-            item.copyWith(
-              status: DownloadStatus.downloading,
-              progress: progress,
-            ));
+        // Look the item up by path every time: the list can be reloaded or
+        // mutated (history reload, delete) while this download runs, so a
+        // captured index would go stale.
+        _patchItemByPath(
+          path,
+          (d) => d.copyWith(
+            status: DownloadStatus.downloading,
+            progress: progress,
+          ),
+        );
 
         if (progress % 10 < 1) {
           _saveDownloadHistory();
@@ -214,24 +221,26 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
         // Don't mark as error if it was cancelled (paused)
         if (cancelToken.isCancelled) return;
 
-        _updateItem(
-            index,
-            item.copyWith(
-              status: DownloadStatus.error,
-              progress: 0.0,
-            ));
+        _patchItemByPath(
+          path,
+          (d) => d.copyWith(
+            status: DownloadStatus.error,
+            progress: 0.0,
+          ),
+        );
         _saveDownloadHistory();
         emit(DownloaderSaveVideoFailure(failure.message));
       },
       (right) async {
         // Mark success immediately so the item appears without waiting on the
         // (slow) thumbnail generation, then backfill the thumbnail after.
-        _updateItem(
-            index,
-            item.copyWith(
-              status: DownloadStatus.success,
-              progress: 100.0,
-            ));
+        _patchItemByPath(
+          path,
+          (d) => d.copyWith(
+            status: DownloadStatus.success,
+            progress: 100.0,
+          ),
+        );
         _saveDownloadHistory();
         emit(DownloaderSaveVideoSuccess(message: right, path: path));
 
@@ -306,31 +315,23 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
         lower.endsWith('.ogg');
   }
 
-  void _updateItem(int index, DownloadItem item) {
-    if (index == -1) {
-      newDownloads.last = item;
-    } else {
-      newDownloads[index] = item;
+  void _patchItemByPath(
+    String path,
+    DownloadItem Function(DownloadItem) transform,
+  ) {
+    final i = newDownloads.indexWhere((d) => d.path == path);
+    if (i != -1) {
+      newDownloads[i] = transform(newDownloads[i]);
     }
   }
 
-  void _addItem(int index, DownloadItem item) {
-    if (index == -1) {
+  void _upsertItemByPath(DownloadItem item) {
+    final i = newDownloads.indexWhere((d) => d.path == item.path);
+    if (i == -1) {
       newDownloads.add(item);
     } else {
-      newDownloads[index] = item.copyWith(status: DownloadStatus.downloading);
+      newDownloads[i] = item;
     }
-  }
-
-  int _checkIfItemIsExistInDownloads(DownloadItem item) {
-    int index = -1;
-    for (int i = 0; i < newDownloads.length; i++) {
-      if (newDownloads[i].video == item.video) {
-        index = i;
-        return index;
-      }
-    }
-    return index;
   }
 
   List<VideoItem> oldDownloads = [];
@@ -383,8 +384,16 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
 
       if (historyJson != null) {
         final List<dynamic> historyList = json.decode(historyJson);
-        newDownloads =
-            historyList.map((item) => DownloadItem.fromJson(item)).toList();
+        // Parse per-item: one corrupt entry must not wipe the whole history.
+        final parsed = <DownloadItem>[];
+        for (final raw in historyList) {
+          try {
+            parsed.add(DownloadItem.fromJson(raw));
+          } catch (_) {
+            // skip unreadable entry
+          }
+        }
+        newDownloads = parsed;
 
         for (int i = 0; i < newDownloads.length; i++) {
           final file = File(newDownloads[i].path);
@@ -401,7 +410,8 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
         emit(DownloadHistoryLoaded(downloads: newDownloads));
       }
     } catch (e) {
-      newDownloads = [];
+      // Keep the in-memory list untouched; wiping it here would erase the
+      // user's history on a single prefs read failure.
     }
   }
 
@@ -427,11 +437,24 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
       _cancelTokens[event.path]?.cancel("Paused by user");
       _cancelTokens.remove(event.path);
 
-      _updateItem(
-          index, newDownloads[index].copyWith(status: DownloadStatus.paused));
+      _patchItemByPath(
+          event.path, (d) => d.copyWith(status: DownloadStatus.paused));
       await _saveDownloadHistory();
       emit(DownloaderVideoPaused(path: event.path));
     }
+  }
+
+  /// Re-pick the quality option for a stored item; null when the source
+  /// video no longer carries any link (stale/partial entry).
+  VideoLink? _resolveStoredOption(DownloadItem item) {
+    if (item.video.videoLinks.isEmpty) return null;
+    return item.video.videoLinks.firstWhere(
+      (link) => link.id == item.selectedLinkId,
+      orElse: () => item.video.videoLinks.firstWhere(
+        (link) => link.link == item.selectedLink,
+        orElse: () => item.video.videoLinks.first,
+      ),
+    );
   }
 
   Future<void> _resumeVideo(
@@ -441,13 +464,15 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
     final index = newDownloads.indexWhere((item) => item.path == event.path);
     if (index != -1 && newDownloads[index].status == DownloadStatus.paused) {
       final item = newDownloads[index];
-      final option = item.video.videoLinks.firstWhere(
-        (link) => link.id == item.selectedLinkId,
-        orElse: () => item.video.videoLinks.firstWhere(
-          (link) => link.link == item.selectedLink,
-          orElse: () => item.video.videoLinks.first,
-        ),
-      );
+      final option = _resolveStoredOption(item);
+      if (option == null) {
+        _patchItemByPath(
+            event.path, (d) => d.copyWith(status: DownloadStatus.error));
+        await _saveDownloadHistory();
+        emit(const DownloaderSaveVideoFailure(
+            "Sumber unduhan tidak tersedia lagi"));
+        return;
+      }
       add(DownloaderSaveVideo(video: item.video, selectedLink: option));
     }
   }
@@ -492,18 +517,17 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
     final index = newDownloads.indexWhere((item) => item.path == event.path);
     if (index != -1) {
       final item = newDownloads[index];
+      final option = _resolveStoredOption(item);
+      if (option == null) {
+        emit(const DownloaderSaveVideoFailure(
+            "Sumber unduhan tidak tersedia lagi"));
+        return;
+      }
 
-      _updateItem(index,
-          item.copyWith(status: DownloadStatus.downloading, progress: 0.0));
+      _patchItemByPath(event.path,
+          (d) => d.copyWith(status: DownloadStatus.downloading, progress: 0.0));
       await _saveDownloadHistory();
 
-      final option = item.video.videoLinks.firstWhere(
-        (link) => link.id == item.selectedLinkId,
-        orElse: () => item.video.videoLinks.firstWhere(
-          (link) => link.link == item.selectedLink,
-          orElse: () => item.video.videoLinks.first,
-        ),
-      );
       add(DownloaderSaveVideo(video: item.video, selectedLink: option));
     }
   }

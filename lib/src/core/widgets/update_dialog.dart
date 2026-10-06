@@ -20,7 +20,7 @@ class UpdateDialog extends StatefulWidget {
   State<UpdateDialog> createState() => _UpdateDialogState();
 }
 
-enum _Phase { info, downloading, waitingInstaller, done, error }
+enum _Phase { info, downloading, waitingInstaller, error }
 
 class _UpdateDialogState extends State<UpdateDialog> {
   _Phase _phase = _Phase.info;
@@ -117,14 +117,6 @@ class _UpdateDialogState extends State<UpdateDialog> {
             valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
           ),
         );
-      case _Phase.done:
-        return Container(
-          width: 48,
-          height: 48,
-          decoration: const BoxDecoration(
-              color: AppColors.green, shape: BoxShape.circle),
-          child: const Icon(Icons.check, color: Colors.white, size: 28),
-        );
       case _Phase.error:
         return Container(
           width: 48,
@@ -141,7 +133,6 @@ class _UpdateDialogState extends State<UpdateDialog> {
       _Phase.info: AppStrings.updateAvailable,
       _Phase.downloading: "Mengunduh Update...",
       _Phase.waitingInstaller: "Menunggu installer...",
-      _Phase.done: "Selesai!",
       _Phase.error: "Gagal",
     };
     return Text(
@@ -218,7 +209,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
             if (!info.isForced) ...[
               const SizedBox(height: 8),
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  widget.updateService.dismiss(info.versionName);
+                  Navigator.pop(context);
+                },
                 child:
                     Text(AppStrings.later, style: TextStyle(color: mutedColor)),
               ),
@@ -273,9 +267,6 @@ class _UpdateDialogState extends State<UpdateDialog> {
           ],
         );
 
-      case _Phase.done:
-        return const SizedBox.shrink();
-
       case _Phase.error:
         return Column(
           children: [
@@ -304,6 +295,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            // Always leave an exit: a broken download URL must never trap
+            // the user in this dialog.
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Tutup", style: TextStyle(color: mutedColor)),
             ),
           ],
         );

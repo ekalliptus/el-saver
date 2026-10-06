@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -93,8 +94,13 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
   }
 
   void _loadBannerAd() {
+    // Test ad unit in debug builds: production traffic against the live unit
+    // risks AdMob invalid-traffic flags.
+    final adUnitId = kDebugMode
+        ? 'ca-app-pub-3940256099942544/6300978111'
+        : 'ca-app-pub-9374589831001594/1262943956';
     _bannerAd = BannerAd(
-      adUnitId: 'ca-app-pub-9374589831001594/1262943956',
+      adUnitId: adUnitId,
       size: AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(
@@ -144,7 +150,9 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
               }
               if (state is DownloaderGetVideoSuccess &&
                   state.video.videoLinks.isEmpty) {
-                buildToast(msg: state.video.message!, type: ToastType.error);
+                buildToast(
+                    msg: state.video.message ?? 'Gagal mengambil video',
+                    type: ToastType.error);
               }
               if (state is DownloaderSaveVideoSuccess) {
                 buildToast(msg: state.message, type: ToastType.success);

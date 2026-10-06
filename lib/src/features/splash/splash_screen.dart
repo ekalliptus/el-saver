@@ -99,10 +99,6 @@ class _SplashScreenState extends State<SplashScreen>
         onTimeout: () => [],
       );
 
-      Timer(const Duration(seconds: 3), () {
-        if (mounted && !_hasNavigated) _navigateToDownloader();
-      });
-
       await _checkPermissionsAndNavigate();
     } catch (e) {
       developer.log('Init error: $e', name: 'SplashScreen');
@@ -151,7 +147,9 @@ class _SplashScreenState extends State<SplashScreen>
         'permissionsGranted': permissionsGranted,
       };
     } catch (_) {
-      return {'isFirstLaunch': false, 'permissionsGranted': true};
+      // Assume NOT granted: the permission setup screen re-checks and lets
+      // the user through; silently claiming granted would skip setup forever.
+      return {'isFirstLaunch': false, 'permissionsGranted': false};
     }
   }
 

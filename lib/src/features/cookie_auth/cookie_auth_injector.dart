@@ -32,7 +32,9 @@ void initCookieAuth() {
     ),
   );
 
-  sl.registerFactory(
+  // Singleton: the webview login screen and the accounts screen must share
+  // one bloc, or the login sync-status states never reach the accounts UI.
+  sl.registerLazySingleton(
     () => AccountBloc(cookieRepo: sl(), extractionService: sl()),
   );
 }

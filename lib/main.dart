@@ -14,8 +14,14 @@ import 'dart:developer' as developer;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Separate try blocks: an AdMob failure (network, policy) must not skip
+  // Firebase and vice versa.
   try {
     await MobileAds.instance.initialize();
+  } catch (e) {
+    developer.log('AdMob init failed (app continues): $e', name: 'Main');
+  }
+  try {
     await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform);
     developer.log('Firebase initialized', name: 'Main');
@@ -23,22 +29,13 @@ void main() async {
     developer.log('Firebase init failed (app continues): $e', name: 'Main');
   }
 
-  try {
-    initApp();
-    Bloc.observer = MyBlockObserver();
+  initApp();
+  Bloc.observer = MyBlockObserver();
 
-    await LanguageService.instance.initialize();
-    await LanguageService.instance.autoDetectLanguage();
-    await sl<PremiumService>().initialize();
-    await PushNotificationService.instance.initialize();
+  await LanguageService.instance.initialize();
+  await LanguageService.instance.autoDetectLanguage();
+  await sl<PremiumService>().initialize();
+  await PushNotificationService.instance.initialize();
 
-    runApp(const MyApp());
-  } catch (e) {
-    developer.log('Critical error: $e', name: 'Main');
-    try {
-      initApp();
-      Bloc.observer = MyBlockObserver();
-    } catch (_) {}
-    runApp(const MyApp());
-  }
+  runApp(const MyApp());
 }

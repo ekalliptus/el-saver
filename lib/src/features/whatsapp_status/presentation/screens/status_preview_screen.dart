@@ -24,6 +24,7 @@ class StatusPreviewScreen extends StatefulWidget {
 class _StatusPreviewScreenState extends State<StatusPreviewScreen> {
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -33,7 +34,13 @@ class _StatusPreviewScreenState extends State<StatusPreviewScreen> {
 
   Future<void> _initVideo() async {
     final vc = VideoPlayerController.file(File(widget.path));
-    await vc.initialize();
+    try {
+      await vc.initialize();
+    } catch (_) {
+      vc.dispose();
+      if (mounted) setState(() => _failed = true);
+      return;
+    }
     final cc = ChewieController(
       videoPlayerController: vc,
       autoPlay: true,
@@ -66,17 +73,24 @@ class _StatusPreviewScreenState extends State<StatusPreviewScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Center(
-        child: widget.isVideo
-            ? (_chewieController != null
-                ? Chewie(controller: _chewieController!)
-                : const CircularProgressIndicator(
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
-                  ))
-            : InteractiveViewer(
-                maxScale: 4,
-                child: Image.file(File(widget.path), fit: BoxFit.contain),
-              ),
+        child: _failed
+            ? const Text(
+                'Tidak bisa memutar media ini. File mungkin sudah terhapus '
+                'dari WhatsApp.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              )
+            : widget.isVideo
+                ? (_chewieController != null
+                    ? Chewie(controller: _chewieController!)
+                    : const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.primaryColor),
+                      ))
+                : InteractiveViewer(
+                    maxScale: 4,
+                    child: Image.file(File(widget.path), fit: BoxFit.contain),
+                  ),
       ),
     );
   }

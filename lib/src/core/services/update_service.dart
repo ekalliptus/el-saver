@@ -7,6 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Compare two semver strings ("x.y.z"). Returns true if [remote] > [local].
 /// Robust to missing components ("1.6" == "1.6.0") and stray build suffixes.
@@ -43,10 +44,26 @@ String abiApkFileName(List<String> supportedAbis) {
 class UpdateService {
   Timer? _checkTimer;
   final _updateController = StreamController<UpdateInfo>.broadcast();
+  String? _dismissedVersion;
 
   Stream<UpdateInfo> get updateStream => _updateController.stream;
 
+  /// Only these hosts may serve update APKs, so a compromised Remote Config
+  /// cannot point devices at arbitrary binaries.
+  static const _allowedDownloadHosts = {
+    'github.com',
+    'raw.githubusercontent.com',
+    'objects.githubusercontent.com',
+    'api.ekalliptus.com',
+  };
+
   Future<void> initialize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _dismissedVersion = prefs.getString('update_dismissed_version');
+    } catch (_) {
+      // Dismissal memory is best-effort.
+    }
     try {
       final config = FirebaseRemoteConfig.instance;
       await config.setConfigSettings(RemoteConfigSettings(
@@ -81,6 +98,16 @@ class UpdateService {
     Future.delayed(const Duration(seconds: 5), checkForUpdate);
   }
 
+  /// Remember that the user declined [versionName] so the periodic check
+  /// stops re-prompting for it (forced updates keep re-prompting).
+  Future<void> dismiss(String versionName) async {
+    _dismissedVersion = versionName;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('update_dismissed_version', versionName);
+    } catch (_) {}
+  }
+
   Future<UpdateInfo?> checkForUpdate() async {
     try {
       final config = FirebaseRemoteConfig.instance;
@@ -93,6 +120,8 @@ class UpdateService {
       final changelog = config.getString('changelog');
       final isForcedStr = config.getString('is_forced').toLowerCase();
       final isForced = isForcedStr == 'true' || isForcedStr == '1';
+
+      if (!isForced && latestVersionName == _dismissedVersion) return null;
 
       final packageInfo = await PackageInfo.fromPlatform();
       final currentCode = int.tryParse(packageInfo.buildNumber) ?? 0;
@@ -147,6 +176,12 @@ class UpdateService {
   Future<String?> downloadUpdate(String url,
       {Function(double)? onProgress}) async {
     try {
+      final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+      if (!_allowedDownloadHosts.contains(host)) {
+        developer.log('Update download blocked: untrusted host $host',
+            name: 'UpdateService');
+        return null;
+      }
       final dir = await getTemporaryDirectory();
       final savePath = '${dir.path}/el_saver_update.apk';
 
@@ -257,8 +292,4 @@ class UpdateInfo {
     this.changelog = '',
     this.isForced = false,
   });
-
-  bool get isNewerVersion => versionCode > currentVersionCode;
 }
-
-enum UpdateStatus { idle, checking, available, downloading, installing, error }

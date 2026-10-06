@@ -12,11 +12,6 @@ class AccountsLoaded extends AccountState {
   AccountsLoaded(this.cookies);
 }
 
-class LoginInProgress extends AccountState {
-  final SocialPlatform platform;
-  LoginInProgress(this.platform);
-}
-
 class LoginSuccess extends AccountState {
   final SocialPlatform platform;
   final bool synced;
@@ -31,5 +26,6 @@ class LoginFailure extends AccountState {
 
 class LogoutSuccess extends AccountState {
   final SocialPlatform platform;
-  LogoutSuccess(this.platform);
+  final bool serverSynced;
+  LogoutSuccess(this.platform, {this.serverSynced = false});
 }
