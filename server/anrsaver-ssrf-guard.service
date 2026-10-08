@@ -1,0 +1,37 @@
+[Unit]
+Description=ANR Saver SSRF guard: block anrsaver services from internal networks
+# The API services run as `anrsaver` and hand user-supplied URLs to yt-dlp.
+# These rules make private/link-local/loopback destinations unreachable for
+# that UID at the kernel level, so DNS-rebinding or numeric-IP tricks cannot
+# pivot into internal services even if URL validation is bypassed.
+#
+# Rules are INSERTED at the top of OUTPUT (position 1) because ufw's
+# `-o lo -j ACCEPT` inside ufw-before-output would otherwise accept
+# loopbound traffic before an appended rule ever sees it. Only uid anrsaver
+# is affected; Caddy, root and docker keep their normal path.
+After=network-pre.target
+Wants=network-pre.target
+Before=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# $$ escapes systemd variable expansion so sh sees $net.
+# Local DNS stub (127.0.0.53:53) must stay reachable or resolution fails.
+
+# Remove any previous instance (keeps restarts idempotent). A missing rule
+# makes -D exit nonzero, so end the script with `exit 0`.
+ExecStartPre=/bin/sh -c 'for net in 224.0.0.0/4 192.168.0.0/16 172.16.0.0/12 169.254.0.0/16 127.0.0.0/8 100.64.0.0/10 10.0.0.0/8 0.0.0.0/8; do /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT 2>/dev/null; done; for net in fe80::/10 fc00::/7 ::1/128; do /usr/sbin/ip6tables -D OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT 2>/dev/null; done; for proto in udp tcp; do /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p $$proto -m $$proto --dport 53 -j ACCEPT 2>/dev/null; done; /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; exit 0'
+
+# Insert REJECTs first, then the ESTABLISHED accept, then the DNS-stub
+# ACCEPTs — inserting at position 1 reverses insertion order, so the final
+# order is: DNS stub, ESTABLISHED, REJECTs, all above ufw's chains.
+# ESTABLISHED must pass: blocking it would also drop the API services' own
+# replies to legitimate loopback clients (Caddy -> 127.0.0.1:9002/9005).
+# Only NEW outbound connections from uid anrsaver get rejected.
+ExecStart=/bin/sh -c 'for net in 224.0.0.0/4 192.168.0.0/16 172.16.0.0/12 169.254.0.0/16 127.0.0.0/8 100.64.0.0/10 10.0.0.0/8 0.0.0.0/8; do /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT; done; for net in fe80::/10 fc00::/7 ::1/128; do /usr/sbin/ip6tables -I OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT; done; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p tcp -m tcp --dport 53 -j ACCEPT; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p udp -m udp --dport 53 -j ACCEPT'
+
+ExecStop=/bin/sh -c 'for net in 224.0.0.0/4 192.168.0.0/16 172.16.0.0/12 169.254.0.0/16 127.0.0.0/8 100.64.0.0/10 10.0.0.0/8 0.0.0.0/8; do /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT 2>/dev/null; done; for net in fe80::/10 fc00::/7 ::1/128; do /usr/sbin/ip6tables -D OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT 2>/dev/null; done; for proto in udp tcp; do /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p $$proto -m $$proto --dport 53 -j ACCEPT 2>/dev/null; done; /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; exit 0'
+
+[Install]
+WantedBy=multi-user.target

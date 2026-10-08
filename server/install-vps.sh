@@ -64,21 +64,29 @@ echo ">> Python venv + deps..."
   "yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git" || true
 
 echo ">> deno (JS runtime for yt-dlp's YouTube EJS solver)..."
-if ! command -v deno >/dev/null; then
-  curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/root/.deno sh
+# Pinned release installed straight from GitHub — no mutable install script.
+DENO_VERSION=v2.9.7
+if ! command -v deno >/dev/null || ! deno --version 2>/dev/null | grep -q "${DENO_VERSION#v}"; then
+  apt-get install -y -qq unzip
+  curl -fsSL -o /tmp/deno.zip \
+    "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip"
+  unzip -oq /tmp/deno.zip -d /usr/local/bin
+  chmod +x /usr/local/bin/deno
+  rm -f /tmp/deno.zip
 fi
-# Symlink to a global path so the systemd service PATH can find it
-ln -sf /root/.deno/bin/deno /usr/local/bin/deno
 /usr/local/bin/deno --version | head -1 || echo "WARN: deno not runnable"
 
 echo ">> Cobalt via docker compose..."
 ( set -a; . "$APP_DIR/.env"; set +a; cd "$SRC_DIR" && docker compose up -d )
 
 echo ">> systemd services..."
-cp -f "$SELF_DIR/ytdlp-api.service" "$SELF_DIR/cookie-sync.service" /etc/systemd/system/
+cp -f "$SELF_DIR/ytdlp-api.service" "$SELF_DIR/cookie-sync.service" \
+      "$SELF_DIR/anrsaver-ssrf-guard.service" /etc/systemd/system/
 systemctl daemon-reload
+# Kernel-level SSRF guard must be active before the API services run.
+systemctl enable --now anrsaver-ssrf-guard.service
 systemctl enable --now ytdlp-api.service cookie-sync.service
-systemctl restart ytdlp-api.service cookie-sync.service
+systemctl restart anrsaver-ssrf-guard.service ytdlp-api.service cookie-sync.service
 
 # HTTPS reverse proxy. Existing Caddy config is preserved as a dated backup.
 [[ -f /etc/caddy/Caddyfile ]] && cp -a /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak.$(date +%s)"

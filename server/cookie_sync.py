@@ -340,6 +340,9 @@ def _write_licenses(data: dict):
 class RedeemPayload(BaseModel):
     key: str
     device_id: str
+    # Optional previous identifier (older app builds bound licenses to
+    # Build.ID); lets a device rebind after the app update without admin help.
+    legacy_device_id: str | None = None
 
 
 @app.post("/premium/redeem")
@@ -348,17 +351,21 @@ def premium_redeem(payload: RedeemPayload, request: Request, x_api_key: str = He
     _rate_limit(request, "premium-redeem", 10, 60)
     key = payload.key.strip().upper()
     device_id = payload.device_id.strip().lower()
+    legacy_id = (payload.legacy_device_id or "").strip().lower()
     if not LICENSE_RE.match(key):
         raise HTTPException(400, "Format kunci tidak valid (ELS-XXXX-XXXX-XXXX)")
     if not _DEVICE_RE.match(device_id):
         raise HTTPException(400, "device_id tidak valid")
+    if legacy_id and not _DEVICE_RE.match(legacy_id):
+        legacy_id = ""
 
     with _json_lock:
         licenses = _read_licenses()
         entry = licenses.get(key)
         if entry is None:
             raise HTTPException(404, "Kunci tidak dikenal")
-        if entry.get("device_id") and entry["device_id"] != device_id:
+        bound = entry.get("device_id")
+        if bound and bound != device_id and bound != legacy_id:
             raise HTTPException(409, "Kunci sudah dipakai di perangkat lain")
 
         entry["device_id"] = device_id
@@ -384,19 +391,35 @@ def _license_active(entry: dict) -> bool:
 
 class VerifyPayload(BaseModel):
     device_id: str
+    legacy_device_id: str | None = None
 
 
 @app.post("/premium/verify")
 def premium_verify(payload: VerifyPayload, x_api_key: str = Header()):
     _check_key(x_api_key)
     device_id = payload.device_id.strip().lower()
+    legacy_id = (payload.legacy_device_id or "").strip().lower()
     if not _DEVICE_RE.match(device_id):
         raise HTTPException(400, "device_id tidak valid")
-    licenses = _read_licenses()
-    premium = any(
-        entry.get("device_id") == device_id and _license_active(entry)
-        for entry in licenses.values()
-    )
+    if legacy_id and not _DEVICE_RE.match(legacy_id):
+        legacy_id = ""
+    with _json_lock:
+        licenses = _read_licenses()
+        premium = any(
+            entry.get("device_id") == device_id and _license_active(entry)
+            for entry in licenses.values()
+        )
+        if not premium and legacy_id:
+            # One-time migration: rebind licenses held under the legacy
+            # identifier (pre-androidId app builds) to the current one.
+            migrated = False
+            for entry in licenses.values():
+                if entry.get("device_id") == legacy_id and _license_active(entry):
+                    entry["device_id"] = device_id
+                    migrated = True
+            if migrated:
+                _write_licenses(licenses)
+                premium = True
     return {"premium": premium}
 
 
@@ -653,7 +676,14 @@ class PaymentWebhookPayload(BaseModel):
     order_id: str | None = None
     gross_amount: str | None = None
     status: str = "settlement"
-    signature: str  # HMAC-SHA256(order_id|gross_amount, WEBHOOK_SECRET)
+    # Unix seconds. When present it must be inside the signed message and
+    # within +/- WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS of now (anti-replay).
+    # Legacy senders without a timestamp keep the old signature format.
+    timestamp: int | None = None
+    signature: str  # HMAC-SHA256 over the message built in premium_webhook
+
+
+WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
 
 
 def _order_recent(order: dict, max_age_hours: int = 48) -> bool:
@@ -669,11 +699,18 @@ def premium_webhook(payload: PaymentWebhookPayload, request: Request):
     """Payment-notification endpoint for auto-activation. Any detection
     source (Midtrans relay, GoPay merchant watcher, manual script) posts
     here; the matching pending order is marked paid and its license
-    activated. Signature: HMAC-SHA256 over 'order_id|gross_amount'."""
+    activated. Signature: HMAC-SHA256 over 'order_id|gross_amount' (legacy)
+    or 'order_id|gross_amount|timestamp' (preferred, replay-protected)."""
     if not WEBHOOK_SECRET:
         raise HTTPException(503, "Webhook belum dikonfigurasi")
     _rate_limit(request, "premium-webhook", 60, 60)
-    msg = f"{payload.order_id or ''}|{payload.gross_amount or ''}"
+    base = f"{payload.order_id or ''}|{payload.gross_amount or ''}"
+    if payload.timestamp is not None:
+        if abs(_now_utc().timestamp() - payload.timestamp) > WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS:
+            raise HTTPException(403, "Timestamp webhook kedaluwarsa")
+        msg = f"{base}|{payload.timestamp}"
+    else:
+        msg = base
     expected = _hmac.new(
         WEBHOOK_SECRET.encode(), msg.encode(), hashlib.sha256
     ).hexdigest()

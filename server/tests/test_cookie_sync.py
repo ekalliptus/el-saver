@@ -383,5 +383,135 @@ class RateLimitTests(unittest.TestCase):
         cookie_sync._rate_limit(_req("99.9.9.8"), "test-scope", 3, 60)
 
 
+class WebhookTimestampTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        patcher = unittest.mock.patch.multiple(
+            cookie_sync,
+            PREMIUM_FILE=base / "lic.json",
+            ORDER_FILE=base / "orders.json",
+            STATIC_QRIS=_static_qris(),
+            WEBHOOK_SECRET="test-whsec",
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+        self.addCleanup(cookie_sync._rate_hits.clear)
+        self.order = cookie_sync.premium_order(
+            OrderPayload(device_id="e" * 16, package_id="monthly"),
+            _req("10.9.5.1"), cookie_sync.API_KEY,
+        )
+
+    def _sig(self, timestamp=None):
+        oid, amt = self.order["order_id"], self.order["gross_amount"]
+        msg = f"{oid}|{amt}|{timestamp}" if timestamp is not None else f"{oid}|{amt}"
+        return hmac.new(b"test-whsec", msg.encode(), hashlib.sha256).hexdigest()
+
+    def _post(self, timestamp, signature=None):
+        return cookie_sync.premium_webhook(
+            PaymentWebhookPayload(
+                order_id=self.order["order_id"],
+                gross_amount=self.order["gross_amount"],
+                timestamp=timestamp,
+                signature=signature or self._sig(timestamp),
+            ),
+            _req("10.9.5.2"),
+        )
+
+    def test_timestamped_signature_is_accepted(self):
+        ts = int(cookie_sync._now_utc().timestamp())
+        response = self._post(ts)
+        self.assertEqual(response["paid"], True)
+
+    def test_stale_timestamp_is_rejected(self):
+        old = int(cookie_sync._now_utc().timestamp()) - 3600
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            self._post(old)
+        self.assertEqual(error.exception.status_code, 403)
+        self.assertEqual(
+            cookie_sync._read_orders()[self.order["order_id"]]["status"],
+            "pending",
+        )
+
+    def test_timestamp_outside_signature_is_rejected(self):
+        ts = int(cookie_sync._now_utc().timestamp())
+        # Signature over the legacy message (no timestamp) while a timestamp
+        # is present in the payload: must not verify.
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            self._post(ts, signature=self._sig())
+        self.assertEqual(error.exception.status_code, 403)
+
+
+class LegacyDeviceMigrationTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        patcher = unittest.mock.patch.multiple(
+            cookie_sync,
+            PREMIUM_FILE=Path(self._tmp.name) / "lic.json",
+            ORDER_FILE=Path(self._tmp.name) / "orders.json",
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+        self.addCleanup(cookie_sync._rate_hits.clear)
+
+    def test_verify_migrates_legacy_binding(self):
+        legacy = "a" * 16
+        current = "b" * 16
+        cookie_sync._write_licenses({
+            "ELS-AAAA-BBBB-CCCC": {
+                "device_id": legacy, "redeemed_at": None,
+            },
+        })
+        response = cookie_sync.premium_verify(
+            cookie_sync.VerifyPayload(device_id=current, legacy_device_id=legacy),
+            cookie_sync.API_KEY,
+        )
+        self.assertEqual(response["premium"], True)
+        entry = cookie_sync._read_licenses()["ELS-AAAA-BBBB-CCCC"]
+        self.assertEqual(entry["device_id"], current)
+
+    def test_verify_does_not_migrate_someone_elses_legacy_id(self):
+        cookie_sync._write_licenses({
+            "ELS-AAAA-BBBB-CCCC": {
+                "device_id": "c" * 16, "redeemed_at": None,
+            },
+        })
+        response = cookie_sync.premium_verify(
+            cookie_sync.VerifyPayload(device_id="b" * 16, legacy_device_id="a" * 16),
+            cookie_sync.API_KEY,
+        )
+        self.assertEqual(response["premium"], False)
+        self.assertEqual(
+            cookie_sync._read_licenses()["ELS-AAAA-BBBB-CCCC"]["device_id"],
+            "c" * 16,
+        )
+
+    def test_redeem_rebinds_legacy_bound_key(self):
+        key = "ELS-DDDD-EEEE-FFFF"
+        cookie_sync._write_licenses({
+            key: {"device_id": "a" * 16, "redeemed_at": None},
+        })
+        response = cookie_sync.premium_redeem(
+            RedeemPayload(key=key, device_id="b" * 16, legacy_device_id="a" * 16),
+            _req("10.9.6.1"), cookie_sync.API_KEY,
+        )
+        self.assertEqual(response["premium"], True)
+        self.assertEqual(cookie_sync._read_licenses()[key]["device_id"], "b" * 16)
+
+    def test_redeem_still_blocks_foreign_device_without_legacy_match(self):
+        key = "ELS-GGGG-HHHH-IIII"
+        cookie_sync._write_licenses({
+            key: {"device_id": "a" * 16, "redeemed_at": None},
+        })
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            cookie_sync.premium_redeem(
+                RedeemPayload(key=key, device_id="b" * 16, legacy_device_id="c" * 16),
+                _req("10.9.6.2"), cookie_sync.API_KEY,
+            )
+        self.assertEqual(error.exception.status_code, 409)
+
+
 if __name__ == "__main__":
     unittest.main()

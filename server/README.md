@@ -57,3 +57,28 @@ curl http://127.0.0.1:9000/            # cobalt info JSON
 curl http://127.0.0.1:9002/health      # {"status":"ok","ytdlp_version":...}
 curl http://127.0.0.1:9005/health      # {"status":"ok",...}
 ```
+
+## Premium payment webhook (auto-activation)
+
+`POST /cookie-sync/premium/webhook` marks a pending order paid and activates
+its license. Both `order_id`+`gross_amount` (exact) and `gross_amount` only
+(unique cent-suffix, fresh pending orders <48h) are accepted.
+
+Signature is HMAC-SHA256 over the message with `WEBHOOK_SECRET`:
+
+```
+legacy:    order_id|gross_amount
+preferred: order_id|gross_amount|timestamp      # unix seconds, ±5 min window
+```
+
+Senders SHOULD include `timestamp` (replay-protected); legacy messages
+without it still verify. Status values `settlement|paid|success` activate;
+anything else is ignored.
+
+## SSRF guard
+
+`anrsaver-ssrf-guard.service` inserts iptables OUTPUT rules (uid anrsaver
+only) rejecting NEW connections to loopback/private/link-local ranges —
+kernel-level backstop behind the URL validation in `ytdlp_api.py`. The DNS
+stub (127.0.0.53) and ESTABLISHED flows stay allowed so resolution and the
+services' own replies (Caddy → 127.0.0.1:9002/9005) keep working.
