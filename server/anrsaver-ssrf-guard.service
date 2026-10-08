@@ -29,14 +29,13 @@ ExecStartPre=/bin/sh -c 'for net in 224.0.0.0/4 192.168.0.0/16 172.16.0.0/12 169
 # ESTABLISHED must pass: blocking it would also drop the API services' own
 # replies to legitimate loopback clients (Caddy -> 127.0.0.1:9002/9005).
 # Only NEW outbound connections from uid anrsaver get rejected.
-ExecStart=/bin/sh -c 'for net in 224.0.0.0/4 192.168.0.0/16 172.16.0.0/12 169.254.0.0/16 127.0.0.0/8 100.64.0.0/10 10.0.0.0/8 0.0.0.0/8; do /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT; done; for net in fe80::/10 fc00::/7 ::1/128; do /usr/sbin/ip6tables -I OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT; done; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p tcp -m tcp --dport 53 -j ACCEPT; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p udp -m udp --dport 53 -j ACCEPT; /usr/sbin/iptables -t nat -C PREROUTING -p tcp --dport 8001 -j REDIRECT --to-ports 443 2>/dev/null || /usr/sbin/iptables -t nat -A PREROUTING -p tcp --dport 8001 -j REDIRECT --to-ports 443'
+ExecStart=/bin/sh -c 'for net in 224.0.0.0/4 192.168.0.0/16 172.16.0.0/12 169.254.0.0/16 127.0.0.0/8 100.64.0.0/10 10.0.0.0/8 0.0.0.0/8; do /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT; done; for net in fe80::/10 fc00::/7 ::1/128; do /usr/sbin/ip6tables -I OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT; done; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p tcp -m tcp --dport 53 -j ACCEPT; /usr/sbin/iptables -I OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p udp -m udp --dport 53 -j ACCEPT'
 
-ExecStop=/bin/sh -c 'for net in 224.0.0.0/4 192.168.0.0/16 172.16.0.0/12 169.254.0.0/16 127.0.0.0/8 100.64.0.0/10 10.0.0.0/8 0.0.0.0/8; do /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT 2>/dev/null; done; for net in fe80::/10 fc00::/7 ::1/128; do /usr/sbin/ip6tables -D OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT 2>/dev/null; done; for proto in udp tcp; do /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p $$proto -m $$proto --dport 53 -j ACCEPT 2>/dev/null; done; /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; /usr/sbin/iptables -t nat -D PREROUTING -p tcp --dport 8001 -j REDIRECT --to-ports 443 2>/dev/null; exit 0'
+ExecStop=/bin/sh -c 'for net in 224.0.0.0/4 192.168.0.0/16 172.16.0.0/12 169.254.0.0/16 127.0.0.0/8 100.64.0.0/10 10.0.0.0/8 0.0.0.0/8; do /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT 2>/dev/null; done; for net in fe80::/10 fc00::/7 ::1/128; do /usr/sbin/ip6tables -D OUTPUT -m owner --uid-owner anrsaver -d $$net -j REJECT 2>/dev/null; done; for proto in udp tcp; do /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -d 127.0.0.53/32 -p $$proto -m $$proto --dport 53 -j ACCEPT 2>/dev/null; done; /usr/sbin/iptables -D OUTPUT -m owner --uid-owner anrsaver -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; exit 0'
 
-# NOTE: the :8001 -> :443 REDIRECT bridges a stale Cloudflare Origin Rule
-# that points api.ekalliptus.com origin fetches at port 8001. Delete that
-# rule in the CF dashboard, then this redirect becomes a harmless no-op and
-# can be removed.
+# History note: a temporary :8001 -> :443 REDIRECT here once bridged a stale
+# Cloudflare Origin Rule; the rule was deleted 2026-10-09 and the bridge was
+# removed after confirming normal :443 origin fetches work.
 
 [Install]
 WantedBy=multi-user.target
