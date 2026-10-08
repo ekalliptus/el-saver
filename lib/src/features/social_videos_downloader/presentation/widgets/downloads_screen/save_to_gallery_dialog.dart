@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/utils/app_colors.dart';
 import '../../../../../core/helpers/dir_helper.dart';
 import '../../../../../core/utils/app_strings.dart';
+import '../../../../../core/common_widgets/fancy_loader.dart';
 
 enum _SaveState { saving, success, error }
 
@@ -130,12 +131,7 @@ class _SaveToGalleryDialogState extends State<SaveToGalleryDialog>
           key: const ValueKey("saving"),
           width: 56,
           height: 56,
-          child: CircularProgressIndicator(
-            strokeWidth: 3,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              AppColors.primaryColor.withOpacity(0.8),
-            ),
-          ),
+          child: Center(child: FancyLoader(size: 26)),
         );
       case _SaveState.success:
         return Container(

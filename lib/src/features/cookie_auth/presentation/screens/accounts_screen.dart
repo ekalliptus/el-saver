@@ -15,6 +15,7 @@ import '../../domain/entities/platform_cookie.dart';
 import '../bloc/account_bloc.dart';
 import '../bloc/account_event.dart';
 import '../bloc/account_state.dart';
+import '../../../../core/common_widgets/fancy_loader.dart';
 
 class AccountsScreen extends StatelessWidget {
   const AccountsScreen({super.key});
@@ -284,12 +285,7 @@ class _UpdateSectionState extends State<_UpdateSection> {
             child: ElevatedButton.icon(
               onPressed: _checking ? null : _checkUpdate,
               icon: _checking
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
+                  ? const FancyLoader(size: 12, color: Colors.white)
                   : const Icon(Icons.refresh, size: 18),
               label: Text(_checking ? "..." : AppStrings.checkUpdate),
               style: ElevatedButton.styleFrom(

@@ -69,16 +69,19 @@ class AppRounter {
             builder: (context) => const PermissionSetupScreen());
       case Routes.accounts:
         return MaterialPageRoute(
-          builder: (context) => BlocProvider(
-            create: (_) => GetIt.I<AccountBloc>()..add(LoadAccounts()),
+          // .value: the bloc is an app-lifetime singleton; a create-based
+          // BlocProvider would CLOSE it when this route pops, breaking the
+          // next visit (closed bloc -> blank screen).
+          builder: (context) => BlocProvider<AccountBloc>.value(
+            value: GetIt.I<AccountBloc>()..add(LoadAccounts()),
             child: const AccountsScreen(),
           ),
         );
       case Routes.webviewLogin:
         final platform = setting.arguments as SocialPlatform;
         return MaterialPageRoute(
-          builder: (context) => BlocProvider(
-            create: (_) => GetIt.I<AccountBloc>(),
+          builder: (context) => BlocProvider<AccountBloc>.value(
+            value: GetIt.I<AccountBloc>(),
             child: WebViewLoginScreen(platform: platform),
           ),
         );

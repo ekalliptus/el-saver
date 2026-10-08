@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/update_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_strings.dart';
+import '../common_widgets/fancy_loader.dart';
 
 class UpdateDialog extends StatefulWidget {
   final UpdateInfo updateInfo;
@@ -109,14 +110,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
           ),
         );
       case _Phase.waitingInstaller:
-        return const SizedBox(
-          width: 48,
-          height: 48,
-          child: CircularProgressIndicator(
-            strokeWidth: 3,
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-          ),
-        );
+        return const FancyLoader(size: 40, color: Colors.orange);
       case _Phase.error:
         return Container(
           width: 48,

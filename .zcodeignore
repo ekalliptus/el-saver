@@ -1,0 +1,290 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Platform-specific build files
+# Android
+/android/.gradle/
+/android/captures/
+/android/gradlew
+/android/gradlew.bat
+/android/local.properties
+/android/app/.cxx/
+/android/app/build/
+/android/.idea/
+/android/*.iml
+
+# iOS
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/App.framework
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Flutter.podspec
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/ephemeral/
+/ios/Flutter/app.flx
+/ios/Flutter/app.zip
+/ios/Flutter/flutter_assets/
+/ios/ServiceDefinitions.json
+/ios/Runner/GeneratedPluginRegistrant.*
+/ios/DerivedData/
+
+# macOS
+/macos/Flutter/GeneratedPluginRegistrant.swift
+/macos/Flutter/ephemeral/
+
+# Linux
+/linux/flutter/generated_plugin_registrant.cc
+/linux/flutter/generated_plugin_registrant.h
+/linux/flutter/generated_plugins.cmake
+
+# Windows
+/windows/flutter/generated_plugin_registrant.cc
+/windows/flutter/generated_plugin_registrant.h
+/windows/flutter/generated_plugins.cmake
+
+# Web
+/web/
+
+# API Keys and Sensitive Configuration
+# Supabase credentials (if stored locally)
+/lib/src/config/supabase_credentials.dart
+/lib/src/config/api_keys.dart
+/lib/src/core/utils/secret_keys.dart
+**/api_config_local.dart
+**/supabase_config_local.dart
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.realm
+
+# Log files
+*.log
+logs/
+crash_reports/
+flutter_logs/
+
+# Cache and temporary files
+.cache/
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+cache/
+.flutter-plugins-dependencies
+
+# OS-specific files
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Development and Testing
+coverage/
+test_coverage/
+*.lcov
+.nyc_output/
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.config.dart
+*.gr.dart
+**/*.g.dart
+**/*.freezed.dart
+**/*.config.dart
+**/*.gr.dart
+
+# Build artifacts
+*.dSYM.zip
+*.dSYM
+*.xcarchive
+*.app
+*.apk
+*.aab
+*.ipa
+dist/
+out/
+
+# Firebase (if used)
+firebase_options.dart
+.firebaserc
+firebase.json
+.firebase/
+
+# Package managers
+node_modules/
+.pnpm-store/
+.yarn/
+
+# IDE and Editor files
+.vscode/settings.json
+.vscode/launch.json
+*.swp
+*.swo
+*~
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Documentation build
+doc/api/
+
+# Flutter version management
+.fvm/
+
+# Analysis and linting
+.dart_frog/
+
+# Local development files
+local.properties
+secrets.properties
+keystore.properties
+key.properties
+upload-keystore.jks
+release-keystore.jks
+
+# APK files for distribution (optional - remove if you want to track APKs)
+*.apk
+*.aab
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# App-specific
+# Update service cache
+update_cache/
+downloads_cache/
+video_cache/
+thumbnails_cache/
+
+# Crash reports
+crash_dump/
+error_logs/
+
+# Performance monitoring
+performance_logs/
+memory_dumps/
+
+# Signing (keep private)
+android/key.properties
+android/app/upload-keystore.jks
+*.jks
+*.keystore
+
+# Firebase service account (keep private)
+scripts/.firebase-sa.json
+**/*firebase*sa*.json
+**/service-account*.json
+**/*firebase-adminsdk*.json
+lib/config/*.json
+
+# Local agent / IDE
+.zcode/
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+bower_components/
+jspm_packages/
+__pycache__/
+site-packages/
+venv/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）

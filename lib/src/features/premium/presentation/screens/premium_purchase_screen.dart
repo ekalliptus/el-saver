@@ -8,6 +8,8 @@ import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/utils/app_colors.dart';
 import 'package:el_saver/src/core/utils/app_enums.dart';
 import 'package:el_saver/src/core/utils/app_strings.dart';
+import '../../../../core/common_widgets/fancy_loader.dart';
+import '../../../../core/common_widgets/skeleton_loader.dart';
 
 String formatRupiah(int amount) =>
     'Rp ${amount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
@@ -159,10 +161,19 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
     }
     final packages = _packages;
     if (packages == null) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
-        ),
+      // Skeleton cards mirror the package list layout while loading.
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          for (final _ in List.filled(3, 0))
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Shimmer(
+                child:
+                    SkeletonBox(width: double.infinity, height: 88, radius: 12),
+              ),
+            ),
+        ],
       );
     }
     return ListView(
@@ -209,10 +220,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
               trailing: FilledButton(
                 onPressed: _creating ? null : () => _buy(pkg),
                 child: _creating
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const FancyLoader(size: 14, color: Colors.white)
                     : Text(formatRupiah(pkg.price)),
               ),
             ),
@@ -289,11 +297,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            const FancyLoader(size: 16),
             const SizedBox(width: 10),
             Expanded(
               child: Text(

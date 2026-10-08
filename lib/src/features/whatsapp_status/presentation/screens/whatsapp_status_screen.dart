@@ -11,6 +11,7 @@ import 'package:el_saver/src/core/utils/app_strings.dart';
 import '../../data/whatsapp_status_repository.dart';
 import '../bloc/whatsapp_status_bloc.dart';
 import 'status_preview_screen.dart';
+import '../../../../core/common_widgets/fancy_loader.dart';
 
 /// Grid of the currently visible WhatsApp statuses. Users must first *view*
 /// the statuses in WhatsApp so the files land in WA's status cache folder.
@@ -44,12 +45,7 @@ class _WhatsappStatusView extends StatelessWidget {
         },
         builder: (context, state) {
           if (state is WhatsappStatusLoading && state.previous.isEmpty) {
-            return const Center(
-              child: CircularProgressIndicator(
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
-              ),
-            );
+            return const Center(child: FancyLoader(size: 36));
           }
           if (state is WhatsappStatusPermissionNeeded) {
             return _StatusMessage(

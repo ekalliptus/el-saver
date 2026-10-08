@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:el_saver/src/core/services/permission_service.dart';
 import '../../config/routes_manager.dart';
 import 'dart:developer' as developer;
+import '../common_widgets/fancy_loader.dart';
 
 class PermissionSetupScreen extends StatefulWidget {
   const PermissionSetupScreen({super.key});
@@ -196,13 +197,9 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> {
                                   ),
                                 ),
                                 child: _isLoading
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
+                                    ? const FancyLoader(
+                                        size: 14,
+                                        color: Colors.white,
                                       )
                                     : const Text(
                                         'Setup Permissions',

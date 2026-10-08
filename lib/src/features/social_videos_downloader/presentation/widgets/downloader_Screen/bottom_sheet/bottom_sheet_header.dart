@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../../core/utils/app_strings.dart';
 import '../../../../domain/entities/video.dart';
+import '../../../../../../core/common_widgets/fancy_loader.dart';
 
 class BottomSheetHeader extends StatelessWidget {
   final Video videoData;
@@ -64,9 +65,7 @@ class BottomSheetHeader extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: FancyLoader(size: 14),
                         ),
                       );
                     },

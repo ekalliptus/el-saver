@@ -12,6 +12,7 @@ import '../../data/services/cookie_extraction_service.dart';
 import '../bloc/account_bloc.dart';
 import '../bloc/account_event.dart';
 import '../bloc/account_state.dart';
+import '../../../../core/common_widgets/fancy_loader.dart';
 
 class WebViewLoginScreen extends StatefulWidget {
   final SocialPlatform platform;
@@ -184,7 +185,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     if (config == null || controller == null) {
       // Unsupported platform: brief placeholder while the post-frame callback
       // pops this route.
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: FancyLoader(size: 32)));
     }
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -230,15 +231,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.only(right: 16),
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
-                    ),
-                  ),
+                  child: FancyLoader(size: 14),
                 ),
             ],
           ),

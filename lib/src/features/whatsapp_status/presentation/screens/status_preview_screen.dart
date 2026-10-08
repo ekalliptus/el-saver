@@ -4,8 +4,8 @@ import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
-import 'package:el_saver/src/core/utils/app_colors.dart';
 import 'package:el_saver/src/core/utils/app_strings.dart';
+import '../../../../core/common_widgets/fancy_loader.dart';
 
 /// Fullscreen preview for a WhatsApp status image or video.
 class StatusPreviewScreen extends StatefulWidget {
@@ -83,10 +83,7 @@ class _StatusPreviewScreenState extends State<StatusPreviewScreen> {
             : widget.isVideo
                 ? (_chewieController != null
                     ? Chewie(controller: _chewieController!)
-                    : const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                            AppColors.primaryColor),
-                      ))
+                    : const FancyLoader(size: 36))
                 : InteractiveViewer(
                     maxScale: 4,
                     child: Image.file(File(widget.path), fit: BoxFit.contain),
