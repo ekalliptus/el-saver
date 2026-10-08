@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:el_saver/src/core/common_widgets/toast.dart';
 import 'package:el_saver/src/core/utils/app_colors.dart';
 import 'package:el_saver/src/core/utils/app_enums.dart';
+import 'package:el_saver/src/core/utils/app_strings.dart';
 
 import '../../data/whatsapp_status_repository.dart';
 import '../bloc/whatsapp_status_bloc.dart';
@@ -32,11 +33,11 @@ class _WhatsappStatusView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Status WhatsApp')),
+      appBar: AppBar(title: Text(AppStrings.whatsappStatus)),
       body: BlocConsumer<WhatsappStatusBloc, WhatsappStatusState>(
         listener: (context, state) {
           if (state is WhatsappStatusSaved) {
-            buildToast(msg: 'Status tersimpan ke galeri ✔', type: ToastType.success);
+            buildToast(msg: AppStrings.statusSavedToGallery, type: ToastType.success);
           } else if (state is WhatsappStatusError) {
             buildToast(msg: state.message, type: ToastType.error);
           }
@@ -53,12 +54,9 @@ class _WhatsappStatusView extends StatelessWidget {
           if (state is WhatsappStatusPermissionNeeded) {
             return _StatusMessage(
               icon: Icons.folder_off_outlined,
-              title: 'Butuh izin akses file',
-              message:
-                  'Status WhatsApp tersimpan di folder tersembunyi WhatsApp. '
-                  'Aktifkan izin "All files access" untuk EL-Saver agar '
-                  'aplikasi bisa membacanya.',
-              action: 'Berikan Izin',
+              title: AppStrings.filePermissionNeeded,
+              message: AppStrings.whatsappPermissionMessage,
+              action: AppStrings.grantPermission,
               onAction: () => context
                   .read<WhatsappStatusBloc>()
                   .add(const WhatsappStatusRequestPermission()),
@@ -67,9 +65,9 @@ class _WhatsappStatusView extends StatelessWidget {
           if (state is WhatsappStatusError) {
             return _StatusMessage(
               icon: Icons.error_outline,
-              title: 'Gagal memuat',
+              title: AppStrings.loadFailed,
               message: state.message,
-              action: 'Coba Lagi',
+              action: AppStrings.tryAgain,
               onAction: () =>
                   context.read<WhatsappStatusBloc>().add(const WhatsappStatusLoad()),
             );
@@ -212,13 +210,11 @@ class _EmptyStatusGuide extends StatelessWidget {
             Icon(Icons.wysiwyg_rounded,
                 size: 64, color: AppColors.primaryColor.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
-            Text('Belum ada status',
+            Text(AppStrings.noStatusYet,
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            const Text(
-              '1. Buka WhatsApp, lihat status temanmu\n'
-              '2. Kembali ke sini dan tarik ke bawah untuk refresh\n\n'
-              'Status hanya tersedia selama 24 jam di WhatsApp.',
+            Text(
+              AppStrings.emptyStatusGuide,
               textAlign: TextAlign.center,
             ),
           ],

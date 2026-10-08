@@ -4,6 +4,7 @@ import 'package:el_saver/src/features/social_videos_downloader/domain/entities/v
 import 'package:intl/intl.dart';
 
 import '../../../../../../core/utils/app_colors.dart';
+import '../../../../../../core/utils/app_strings.dart';
 
 class CountView extends StatelessWidget {
   final String count;
@@ -164,9 +165,9 @@ class BottomSheetCountItemsState extends State<BottomSheetCountItems> {
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: selectedQuality,
-                      hint: const Text(
-                        'Select Quality',
-                        style: TextStyle(color: AppColors.white),
+                      hint: Text(
+                        AppStrings.selectQuality,
+                        style: const TextStyle(color: AppColors.white),
                       ),
                       icon: const Icon(Icons.arrow_drop_down,
                           color: AppColors.white),
@@ -222,6 +223,8 @@ class BottomSheetCountItemsState extends State<BottomSheetCountItems> {
     final duration = Duration(seconds: videoLength);
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
-    return minutes > 0 ? "$minutes min $seconds sec" : "$seconds sec";
+    return minutes > 0
+        ? AppStrings.durationMinSec(minutes, seconds)
+        : AppStrings.durationSec(seconds);
   }
 }

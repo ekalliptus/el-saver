@@ -1,5 +1,6 @@
 import '../../../../core/error/failure.dart';
 import '../../../../core/utils/app_constants.dart';
+import '../../../../core/utils/app_strings.dart';
 import '../../domain/entities/download_item.dart';
 
 class DownloadErrorClassifier {
@@ -22,10 +23,7 @@ class DownloadErrorClassifier {
       return AuthRequiredFailure(
         platform: platform,
         sourceCode: sourceCode,
-        message:
-            'Video ${_name(platform)} tidak bisa diambil karena platformnya '
-            'menolak akses tanpa login (konten private atau dibatasi anti-bot). '
-            'Login sekali saja, setelah itu video bisa diunduh otomatis.',
+        message: AppStrings.authRequiredMessage(_name(platform)),
       );
     }
     return ServerFailure(message: rawMessage);

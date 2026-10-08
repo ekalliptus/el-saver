@@ -212,15 +212,13 @@ class TiktokVideoRemoteDataSource implements VideoBaseRemoteDataSource {
       final error = data["error"];
       final code = error is Map ? error["code"]?.toString() : error?.toString();
       if (code != null && code.contains("youtube.login")) {
-        throw Exception("Video ini membutuhkan autentikasi YouTube di server. "
-            "Hubungi admin server Cobalt untuk konfigurasi cookies YouTube.");
+        throw Exception(AppStrings.cobaltYoutubeAuthRequired);
       }
       if (code != null && code.contains("link.invalid")) {
-        throw Exception("Link tidak valid atau tidak didukung.");
+        throw Exception(AppStrings.invalidOrUnsupportedLink);
       }
       if (code != null && code.contains("fetch.empty")) {
-        throw Exception("Tidak bisa mengakses konten. Video mungkin private, "
-            "dihapus, atau platform membutuhkan cookies di server.");
+        throw Exception(AppStrings.cannotAccessContent);
       }
       throw Exception("Cobalt error: $code");
     }
@@ -230,15 +228,14 @@ class TiktokVideoRemoteDataSource implements VideoBaseRemoteDataSource {
       if (tunnelUrl.isNotEmpty && await _validateTunnelUrl(tunnelUrl)) {
         return VideoModel.fromCobalt(data, videoLink);
       }
-      throw Exception("Tunnel tidak valid untuk video ini.");
+      throw Exception(AppStrings.tunnelNotValidForVideo);
     }
 
     if (status == "picker") {
       return VideoModel.fromCobalt(data, videoLink);
     }
 
-    throw Exception("Server tidak bisa memproses video ini. "
-        "Coba video lain atau hubungi admin server.");
+    throw Exception(AppStrings.serverCannotProcessVideo);
   }
 
   /// Resolve an audio-only (MP3) URL via the yt-dlp API. yt-dlp (with the deno
@@ -267,7 +264,7 @@ class TiktokVideoRemoteDataSource implements VideoBaseRemoteDataSource {
         return url;
       }
     }
-    throw Exception(data?["detail"]?.toString() ?? "Gagal mengekstrak audio");
+    throw Exception(data?["detail"]?.toString() ?? AppStrings.failedToExtractAudio);
   }
 
   /// HEAD check tunnel URL to verify it will return actual data
@@ -412,11 +409,12 @@ class TiktokVideoRemoteDataSource implements VideoBaseRemoteDataSource {
     final data = response.data as Map<String, dynamic>?;
     if (data == null ||
         (data["status"] != "redirect" && data["status"] != "tunnel")) {
-      throw Exception(data?["detail"]?.toString() ?? "Gagal menyiapkan media");
+      throw Exception(
+          data?["detail"]?.toString() ?? AppStrings.failedToPrepareMedia);
     }
     var url = data["url"]?.toString() ?? '';
     if (url.startsWith('/')) url = '$baseUrl$url';
-    if (url.isEmpty) throw Exception('Media URL kosong');
+    if (url.isEmpty) throw Exception(AppStrings.mediaUrlEmpty);
     final filename = data["filename"]?.toString() ?? 'media${option.extension}';
     final extension = _extensionFromFilename(filename, option.extension);
     final kindName = data["mediaKind"]?.toString();
@@ -481,11 +479,11 @@ class TiktokVideoRemoteDataSource implements VideoBaseRemoteDataSource {
   }) async {
     try {
       if (videoLink.isEmpty) {
-        throw Exception("Video link cannot be empty");
+        throw Exception(AppStrings.videoLinkEmpty);
       }
 
       if (savePath.isEmpty) {
-        throw Exception("Save path cannot be empty");
+        throw Exception(AppStrings.savePathEmpty);
       }
 
       developer.log("Starting download: $videoLink to $savePath",
@@ -509,13 +507,13 @@ class TiktokVideoRemoteDataSource implements VideoBaseRemoteDataSource {
 
       final file = File(savePath);
       if (!file.existsSync()) {
-        throw Exception("Download failed: File was not created");
+        throw Exception(AppStrings.downloadFailedFileNotCreated);
       }
 
       final fileSize = file.lengthSync();
       if (fileSize == 0) {
         await file.delete();
-        throw Exception("Download failed: File is empty");
+        throw Exception(AppStrings.downloadFailedFileEmpty);
       }
 
       developer.log("Download completed successfully: $fileSize bytes",

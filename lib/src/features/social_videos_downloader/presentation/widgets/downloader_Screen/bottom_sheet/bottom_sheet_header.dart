@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../../core/utils/app_strings.dart';
 import '../../../../domain/entities/video.dart';
 
 class BottomSheetHeader extends StatelessWidget {
@@ -98,7 +99,7 @@ class BottomSheetHeader extends StatelessWidget {
         const SizedBox(height: 8),
         // Quality options info
         Text(
-          "${videoData.videoLinks.length} quality option${videoData.videoLinks.length != 1 ? 's' : ''} available",
+          AppStrings.qualityOptionsAvailable(videoData.videoLinks.length),
           style: TextStyle(
             fontSize: 12,
             color: Theme.of(context).primaryColor,

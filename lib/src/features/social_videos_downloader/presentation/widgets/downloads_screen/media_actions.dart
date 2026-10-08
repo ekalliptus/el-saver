@@ -5,6 +5,7 @@ import 'package:open_file/open_file.dart';
 
 import '../../../../../core/helpers/dir_helper.dart';
 import '../../../../../core/utils/app_colors.dart';
+import '../../../../../core/utils/app_strings.dart';
 import 'view_video_screen.dart';
 
 enum MediaOpenTarget { videoPlayer, imageViewer, systemViewer }
@@ -21,7 +22,7 @@ MediaOpenTarget mediaOpenTargetOf(String filePath) {
 
 Future<void> openDownloadedMedia(BuildContext context, String filePath) async {
   if (!File(filePath).existsSync()) {
-    _showError(context, 'File not found.');
+    _showError(context, AppStrings.fileNotFound);
     return;
   }
 
@@ -40,7 +41,7 @@ Future<void> openDownloadedMedia(BuildContext context, String filePath) async {
         _showError(
           context,
           result.message.isEmpty
-              ? 'No app can open this file.'
+              ? AppStrings.noAppCanOpenFile
               : result.message,
         );
       }
@@ -68,14 +69,14 @@ class DownloadedImageViewer extends StatelessWidget {
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.close),
-          tooltip: 'Close image viewer',
+          tooltip: AppStrings.closeImageViewer,
         ),
-        title: const Text('Image preview'),
+        title: Text(AppStrings.imagePreview),
       ),
       body: SafeArea(
         child: Semantics(
           image: true,
-          label: 'Downloaded image preview',
+          label: AppStrings.downloadedImagePreview,
           child: Center(
             child: InteractiveViewer(
               minScale: 0.5,
@@ -83,11 +84,11 @@ class DownloadedImageViewer extends StatelessWidget {
               child: Image.file(
                 File(imagePath),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Padding(
-                  padding: EdgeInsets.all(24),
+                errorBuilder: (_, __, ___) => Padding(
+                  padding: const EdgeInsets.all(24),
                   child: Text(
-                    'Unable to display this image.',
-                    style: TextStyle(color: Colors.white),
+                    AppStrings.unableToDisplayImage,
+                    style: const TextStyle(color: Colors.white),
                     textAlign: TextAlign.center,
                   ),
                 ),

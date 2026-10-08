@@ -169,8 +169,8 @@ class DownloadItemStatus extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const VideoStatusWidget(
-                  label: "Download Paused",
+                VideoStatusWidget(
+                  label: AppStrings.downloadPaused,
                   icon: Icons.pause_circle,
                   color: Colors.orange,
                 ),
@@ -239,7 +239,7 @@ class DownloadItemStatus extends StatelessWidget {
                   child: _IconOnlyButton(
                     icon: Icons.open_in_new_rounded,
                     color: AppColors.primaryColor,
-                    tooltip: 'Open downloaded file',
+                    tooltip: AppStrings.openDownloadedFile,
                     onPressed: () =>
                         openDownloadedMedia(context, currentItem.path),
                   ),
@@ -334,13 +334,13 @@ class DownloadItemStatus extends StatelessWidget {
     final difference = now.difference(time);
 
     if (difference.inMinutes < 1) {
-      return "Just now";
+      return AppStrings.justNow;
     } else if (difference.inHours < 1) {
-      return "${difference.inMinutes}m ago";
+      return AppStrings.minutesAgo(difference.inMinutes);
     } else if (difference.inDays < 1) {
-      return "${difference.inHours}h ago";
+      return AppStrings.hoursAgo(difference.inHours);
     } else if (difference.inDays < 7) {
-      return "${difference.inDays}d ago";
+      return AppStrings.daysAgo(difference.inDays);
     } else {
       return "${time.day}/${time.month}/${time.year}";
     }
@@ -361,7 +361,7 @@ class DownloadItemStatus extends StatelessWidget {
     } catch (e) {
       // File might not exist yet during download
     }
-    return 'Calculating...';
+    return AppStrings.calculating;
   }
 
   void _saveToGallery(BuildContext context, String videoPath) {
@@ -373,13 +373,12 @@ class DownloadItemStatus extends StatelessWidget {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Delete Download'),
-          content: const Text(
-              'Do you want to delete this download from history and remove the file?'),
+          title: Text(AppStrings.deleteDownload),
+          content: Text(AppStrings.deleteDownloadMessage),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(AppStrings.cancel),
             ),
             TextButton(
               onPressed: () {
@@ -390,7 +389,7 @@ class DownloadItemStatus extends StatelessWidget {
                           path: item.path, deleteFile: false),
                     );
               },
-              child: const Text('Remove from History'),
+              child: Text(AppStrings.removeFromHistory),
             ),
             TextButton(
               onPressed: () {
@@ -401,8 +400,8 @@ class DownloadItemStatus extends StatelessWidget {
                           path: item.path, deleteFile: true),
                     );
               },
-              child: const Text('Delete File',
-                  style: TextStyle(color: AppColors.red)),
+              child: Text(AppStrings.deleteFile,
+                  style: const TextStyle(color: AppColors.red)),
             ),
           ],
         );

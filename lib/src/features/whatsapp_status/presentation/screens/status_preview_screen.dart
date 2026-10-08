@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'package:el_saver/src/core/utils/app_colors.dart';
+import 'package:el_saver/src/core/utils/app_strings.dart';
 
 /// Fullscreen preview for a WhatsApp status image or video.
 class StatusPreviewScreen extends StatefulWidget {
@@ -74,9 +75,8 @@ class _StatusPreviewScreenState extends State<StatusPreviewScreen> {
       ),
       body: Center(
         child: _failed
-            ? const Text(
-                'Tidak bisa memutar media ini. File mungkin sudah terhapus '
-                'dari WhatsApp.',
+            ? Text(
+                AppStrings.cannotPlayMedia,
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white70),
               )

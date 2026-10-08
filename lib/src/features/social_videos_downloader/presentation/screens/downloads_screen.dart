@@ -62,7 +62,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                             Icons.filter_list,
                             color: AppColors.white,
                           ),
-                          tooltip: 'Filter & Sort',
+                          tooltip: AppStrings.filterSort,
                         ),
                         if (totalDownloads > 0)
                           Positioned(
@@ -168,10 +168,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 12),
-                    const Center(
+                    Center(
                       child: Text(
-                        'Filter & Sort Downloads',
-                        style: TextStyle(
+                        AppStrings.filterSortDownloads,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
                         ),
@@ -180,9 +180,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     const SizedBox(height: 20),
 
                     // Sort Options
-                    const Text(
-                      'Sort by:',
-                      style: TextStyle(
+                    Text(
+                      AppStrings.sortBy,
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
@@ -194,16 +194,16 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     const SizedBox(height: 20),
 
                     // Platform Filter
-                    const Text(
-                      'Filter by Platform:',
-                      style: TextStyle(
+                    Text(
+                      AppStrings.filterByPlatform,
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 12),
 
-                    _buildPlatformOption(null, 'All Platforms'),
+                    _buildPlatformOption(null, AppStrings.allPlatforms),
                     ...SocialPlatform.values.map((platform) =>
                         _buildPlatformOption(
                             platform, _getPlatformName(platform))),
@@ -260,11 +260,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   String _getSortLabel(SortOption sort) {
     switch (sort) {
       case SortOption.newest:
-        return 'Newest First';
+        return AppStrings.newestFirst;
       case SortOption.oldest:
-        return 'Oldest First';
+        return AppStrings.oldestFirst;
       case SortOption.platform:
-        return 'By Platform';
+        return AppStrings.byPlatform;
     }
   }
 

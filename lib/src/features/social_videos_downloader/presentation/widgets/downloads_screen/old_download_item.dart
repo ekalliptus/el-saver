@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import '../../../../../core/helpers/dir_helper.dart';
 import '../../../../../core/utils/app_assets.dart';
 import '../../../../../core/utils/app_colors.dart';
+import '../../../../../core/utils/app_strings.dart';
 import '../../../domain/entities/video_item.dart';
 import '../../bloc/downloader_bloc/downloader_bloc.dart';
 import 'media_actions.dart';
@@ -65,9 +66,9 @@ class OldDownloadItem extends StatelessWidget {
                         color: Colors.grey[600],
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Text(
-                        "● Downloaded",
-                        style: TextStyle(
+                      child: Text(
+                        "● ${AppStrings.downloaded}",
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
@@ -101,7 +102,7 @@ class OldDownloadItem extends StatelessWidget {
                         context,
                         icon: Icons.open_in_new_rounded,
                         color: AppColors.primaryColor,
-                        tooltip: 'Open downloaded file',
+                        tooltip: AppStrings.openDownloadedFile,
                         onPressed: () =>
                             openDownloadedMedia(context, videoItem.path),
                       ),
@@ -122,7 +123,7 @@ class OldDownloadItem extends StatelessWidget {
                         context,
                         icon: Icons.delete,
                         color: AppColors.red,
-                        tooltip: 'Delete file',
+                        tooltip: AppStrings.deleteFile,
                         onPressed: () =>
                             _confirmDelete(context, videoItem.path),
                       ),
@@ -199,9 +200,9 @@ class OldDownloadItem extends StatelessWidget {
         filename = "${filename.substring(0, 47)}...";
       }
 
-      return filename.isNotEmpty ? filename : "Downloaded Video";
+      return filename.isNotEmpty ? filename : AppStrings.downloadedVideo;
     } catch (e) {
-      return "Downloaded Video";
+      return AppStrings.downloadedVideo;
     }
   }
 
@@ -220,7 +221,7 @@ class OldDownloadItem extends StatelessWidget {
     } catch (e) {
       // Handle error
     }
-    return 'Unknown size';
+    return AppStrings.unknownSize;
   }
 
   String _getFileModifiedTime(String filePath) {
@@ -233,7 +234,7 @@ class OldDownloadItem extends StatelessWidget {
     } catch (e) {
       // Handle error
     }
-    return 'Unknown time';
+    return AppStrings.unknownTime;
   }
 
   void _saveToGallery(BuildContext context, String videoPath) {
@@ -244,20 +245,20 @@ class OldDownloadItem extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete File'),
-        content: const Text(
-            'Delete this downloaded file permanently? This cannot be undone.'),
+        title: Text(AppStrings.deleteFile),
+        content: Text(AppStrings.deleteFilePermanentlyMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
+            child: Text(AppStrings.cancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
               _deleteFile(context, filePath);
             },
-            child: const Text('Delete', style: TextStyle(color: AppColors.red)),
+            child: Text(AppStrings.delete,
+                style: const TextStyle(color: AppColors.red)),
           ),
         ],
       ),

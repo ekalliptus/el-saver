@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../utils/api_config.dart';
@@ -16,6 +17,7 @@ class PremiumService {
   static const _storage = FlutterSecureStorage();
   static const _licenseStorageKey = 'premium_license';
   static const _deviceIdKey = 'premium_device_id';
+  static const _deviceIdChannel = MethodChannel('device_id');
 
   static const _redeemUrl = '${ApiConfig.cookieSyncUrl}/premium/redeem';
   static const _verifyUrl = '${ApiConfig.cookieSyncUrl}/premium/verify';
@@ -24,6 +26,7 @@ class PremiumService {
 
   bool _isPremium = false;
   String? _deviceId;
+  String? _legacyDeviceId;
   String? _licenseKey;
 
   bool get isPremium => _isPremium;
@@ -32,17 +35,37 @@ class PremiumService {
     try {
       _licenseKey = await _storage.read(key: _licenseStorageKey);
       _isPremium = _licenseKey != null;
-      _deviceId = await _storage.read(key: _deviceIdKey);
-      if (_deviceId == null && Platform.isAndroid) {
-        final android = await DeviceInfoPlugin().androidInfo;
-        _deviceId = android.id;
-        if (_deviceId != null) {
-          await _storage.write(key: _deviceIdKey, value: _deviceId);
-        }
-      }
+      _deviceId = await _resolveDeviceId();
     } catch (e) {
       debugPrint('PremiumService init failed: $e');
     }
+  }
+
+  /// Stable per-device identifier for server-side license binding.
+  /// Settings.Secure.ANDROID_ID via the native `device_id` channel — unique
+  /// per device + signing key and survives OS updates. [AndroidDeviceInfo.id]
+  /// (Build.ID) is only a fallback: it's the dotted OS build string shared by
+  /// every device on that Android version, which the server's device_id
+  /// format rejects.
+  Future<String?> _resolveDeviceId() async {
+    String? current;
+    try {
+      current = await _deviceIdChannel.invokeMethod<String>('androidId');
+    } catch (_) {
+      // Fall through to Build.ID below.
+    }
+    if (current == null || current.isEmpty) {
+      if (!Platform.isAndroid) return null;
+      current = (await DeviceInfoPlugin().androidInfo).id;
+    }
+    if (current.isEmpty) return null;
+    final normalized = current.toLowerCase();
+    final cached = await _storage.read(key: _deviceIdKey);
+    if (cached != null && cached != normalized) {
+      _legacyDeviceId = cached;
+    }
+    await _storage.write(key: _deviceIdKey, value: normalized);
+    return normalized;
   }
 
   /// Fetches the available purchase packages from the server.
@@ -116,7 +139,11 @@ class PremiumService {
       final response = await dio.post(
         _redeemUrl,
         options: Options(headers: {'X-Api-Key': ApiConfig.backendApiKey}),
-        data: {'key': licenseKey.trim(), 'device_id': _deviceId},
+        data: {
+        'key': licenseKey.trim(),
+        'device_id': _deviceId,
+        if (_legacyDeviceId != null) 'legacy_device_id': _legacyDeviceId,
+      },
       );
       if (response.data is Map && response.data['premium'] == true) {
         final normalized = licenseKey.trim().toUpperCase();
@@ -154,9 +181,12 @@ class PremiumService {
       final response = await dio.post(
         _verifyUrl,
         options: Options(headers: {'X-Api-Key': ApiConfig.backendApiKey}),
-        data: {'device_id': _deviceId},
-      );
-      final premium = response.data is Map && response.data['premium'] == true;
+      data: {
+        'device_id': _deviceId,
+        if (_legacyDeviceId != null) 'legacy_device_id': _legacyDeviceId,
+      },
+    );
+    final premium = response.data is Map && response.data['premium'] == true;
       if (!premium) {
         await _storage.delete(key: _licenseStorageKey);
         _licenseKey = null;

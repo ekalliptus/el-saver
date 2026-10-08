@@ -66,22 +66,19 @@ class _MyAppState extends State<MyApp> {
         builder: (dialogContext) => AlertDialog(
           icon: Icon(Icons.shield_outlined,
               size: 44, color: AppColors.primaryColor),
-          title: const Text('Lengkapi izin aplikasi'),
-          content: const Text(
-            'Versi baru EL-Saver butuh izin tambahan: akses media (fitur '
-            'Status WhatsApp) dan akses file lengkap. Tanpa itu, sebagian '
-            'fitur tidak berfungsi.\n\nAktifkan sekarang? Prosesnya cepat, '
-            'tinggal ikuti beberapa halaman pengaturan.',
+          title: Text(AppStrings.completeAppPermissions),
+          content: Text(
+            AppStrings.permissionNudgeContent,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Nanti'),
+              child: Text(AppStrings.notNow),
             ),
             FilledButton.icon(
               onPressed: () => Navigator.pop(dialogContext, true),
               icon: const Icon(Icons.shield, size: 18),
-              label: const Text('Aktifkan Sekarang'),
+              label: Text(AppStrings.activateNow),
             ),
           ],
         ),

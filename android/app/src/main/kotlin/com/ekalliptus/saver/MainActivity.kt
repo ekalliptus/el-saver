@@ -21,10 +21,33 @@ class MainActivity: FlutterActivity() {
     private val CHANNEL = "pip_service"
     private val MEDIA_STORE_CHANNEL = "media_store"
     private val THUMBNAIL_CHANNEL = "video_thumbnail"
+    private val DEVICE_ID_CHANNEL = "device_id"
     private var methodChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Stable per-device identifier for premium license binding
+        // (unique per device + signing key, survives OS updates).
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            DEVICE_ID_CHANNEL
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "androidId") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            try {
+                result.success(
+                    android.provider.Settings.Secure.getString(
+                        contentResolver,
+                        android.provider.Settings.Secure.ANDROID_ID,
+                    )
+                )
+            } catch (e: Exception) {
+                result.error("DEVICE_ID_FAILED", e.message ?: "Unable to read Android ID.", null)
+            }
+        }
 
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         methodChannel?.setMethodCallHandler { call, result ->

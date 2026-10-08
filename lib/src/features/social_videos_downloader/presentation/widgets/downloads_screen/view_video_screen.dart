@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../../core/utils/app_colors.dart';
+import '../../../../../core/utils/app_strings.dart';
 
 class ViewVideoScreen extends StatefulWidget {
   final String videoPath;
@@ -34,7 +35,7 @@ class _ViewVideoScreenState extends State<ViewVideoScreen> {
     try {
       final file = File(widget.videoPath);
       if (!file.existsSync()) {
-        setState(() => _error = "File tidak ditemukan");
+        setState(() => _error = AppStrings.fileNotFound);
         return;
       }
 
@@ -84,7 +85,7 @@ class _ViewVideoScreenState extends State<ViewVideoScreen> {
       });
     } catch (e) {
       if (mounted) {
-        setState(() => _error = "Gagal memutar video: $e");
+        setState(() => _error = AppStrings.videoPlayFailed(e.toString()));
       }
     }
   }

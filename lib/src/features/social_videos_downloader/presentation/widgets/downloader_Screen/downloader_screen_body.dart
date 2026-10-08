@@ -49,22 +49,14 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.lock_person_outlined, size: 40),
-        title: Text('Login dulu ke $platformName'),
+        title: Text(AppStrings.loginRequiredTitle(platformName)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '$platformName menolak video diambil tanpa sesi login. '
-              'Ini aturan platformnya (konten private atau pembatasan bot), '
-              'bukan gangguan di aplikasi.',
-            ),
+            Text(AppStrings.loginRequiredExplanation(platformName)),
             const SizedBox(height: 12),
-            Text(
-              'Login sekali lewat situs resmi $platformName di aplikasi ini. '
-              'Sesinya dipakai khusus untuk mengambil video, dan kamu bisa '
-              'logout kapan saja.',
-            ),
+            Text(AppStrings.loginRequiredInstruction(platformName)),
             const SizedBox(height: 12),
             Text(state.message,
                 style: Theme.of(dialogContext).textTheme.bodySmall),
@@ -73,12 +65,12 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Nanti'),
+            child: Text(AppStrings.notNow),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.pop(dialogContext, true),
             icon: const Icon(Icons.login, size: 18),
-            label: Text('Login ke $platformName'),
+            label: Text(AppStrings.loginToPlatform(platformName)),
           ),
         ],
       ),
@@ -151,7 +143,7 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
               if (state is DownloaderGetVideoSuccess &&
                   state.video.videoLinks.isEmpty) {
                 buildToast(
-                    msg: state.video.message ?? 'Gagal mengambil video',
+                    msg: state.video.message ?? AppStrings.failedToFetchVideo,
                     type: ToastType.error);
               }
               if (state is DownloaderSaveVideoSuccess) {
@@ -391,13 +383,13 @@ class _PremiumButton extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isPremium) {
       return Tooltip(
-        message: 'Premium aktif',
+        message: AppStrings.premiumActive,
         child: Icon(Icons.verified_rounded,
             color: AppColors.green, size: 26),
       );
     }
     return Tooltip(
-      message: 'Beli Premium - tanpa iklan',
+      message: AppStrings.buyPremiumNoAds,
       child: IconButton(
         onPressed: onPressed,
         icon: Stack(

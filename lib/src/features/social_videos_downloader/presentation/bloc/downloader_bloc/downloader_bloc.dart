@@ -14,6 +14,7 @@ import '../../../../../core/helpers/dir_helper.dart';
 import '../../../../../core/helpers/media_file_utils.dart';
 import '../../../../../core/utils/app_enums.dart';
 import '../../../../../core/utils/app_constants.dart';
+import '../../../../../core/utils/app_strings.dart';
 import '../../../domain/entities/download_item.dart';
 import '../../../domain/entities/video_item.dart';
 import '../../../domain/entities/video_link.dart';
@@ -368,10 +369,10 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
   }
 
   String _extractVideoTitle(String title) {
-    if (title.isEmpty) return "Downloaded Video";
+    if (title.isEmpty) return AppStrings.downloadedVideo;
     // Only strip URLs, keep everything else (hashtags, mentions are part of title)
     String clean = title.replaceAll(RegExp(r'https?://\S+'), '').trim();
-    return clean.isNotEmpty ? clean : "Downloaded Video";
+    return clean.isNotEmpty ? clean : AppStrings.downloadedVideo;
   }
 
   Future<void> _loadDownloadHistory(
@@ -469,8 +470,8 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
         _patchItemByPath(
             event.path, (d) => d.copyWith(status: DownloadStatus.error));
         await _saveDownloadHistory();
-        emit(const DownloaderSaveVideoFailure(
-            "Sumber unduhan tidak tersedia lagi"));
+        emit(DownloaderSaveVideoFailure(
+            AppStrings.sourceNoLongerAvailable));
         return;
       }
       add(DownloaderSaveVideo(video: item.video, selectedLink: option));
@@ -519,8 +520,8 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
       final item = newDownloads[index];
       final option = _resolveStoredOption(item);
       if (option == null) {
-        emit(const DownloaderSaveVideoFailure(
-            "Sumber unduhan tidak tersedia lagi"));
+        emit(DownloaderSaveVideoFailure(
+            AppStrings.sourceNoLongerAvailable));
         return;
       }
 

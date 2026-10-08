@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/utils/app_colors.dart';
 import '../../../../../core/helpers/dir_helper.dart';
+import '../../../../../core/utils/app_strings.dart';
 
 enum _SaveState { saving, success, error }
 
@@ -164,9 +165,9 @@ class _SaveToGalleryDialogState extends State<SaveToGalleryDialog>
   String get _label {
     switch (_state) {
       case _SaveState.saving:
-        return "Saving to gallery...";
+        return AppStrings.savingToGallery;
       case _SaveState.success:
-        return "Saved to gallery!";
+        return AppStrings.savedToGallery;
       case _SaveState.error:
         return _errorMsg;
     }

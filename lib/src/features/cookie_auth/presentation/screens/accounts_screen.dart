@@ -34,7 +34,7 @@ class AccountsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: cardColor,
         title: Text(
-          "Akun & Cookies",
+          AppStrings.accountsAndCookies,
           style: TextStyle(color: fgColor, fontSize: 18),
         ),
         iconTheme: IconThemeData(color: fgColor),
@@ -44,8 +44,8 @@ class AccountsScreen extends StatelessWidget {
           if (state is LoginSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(state.synced
-                  ? "Login berhasil & cookies tersinkronisasi ke server!"
-                  : "Login berhasil! Cookies tersimpan lokal. (Server sync gagal)"),
+                  ? AppStrings.loginSuccessSynced
+                  : AppStrings.loginSuccessLocalSyncFailed),
               backgroundColor: state.synced ? AppColors.green : Colors.orange,
             ));
           }
@@ -58,8 +58,8 @@ class AccountsScreen extends StatelessWidget {
           if (state is LogoutSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(state.serverSynced
-                  ? "Logout berhasil"
-                  : "Logout lokal berhasil, tapi server belum konfirmasi. Coba logout lagi nanti."),
+                  ? AppStrings.logoutSuccess
+                  : AppStrings.logoutLocalSyncFailed),
               backgroundColor:
                   state.serverSynced ? AppColors.primaryColor : Colors.orange,
             ));
@@ -85,7 +85,7 @@ class AccountsScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        "Login ke platform untuk download konten yang membutuhkan autentikasi. Cookies disimpan terenkripsi di perangkat dan disinkronkan ke server Cobalt.",
+                        AppStrings.accountsInfoMessage,
                         style: TextStyle(
                           color: mutedColor,
                           fontSize: 12,
@@ -116,22 +116,21 @@ class AccountsScreen extends StatelessWidget {
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (dialogContext) => AlertDialog(
-                        title: Text('Logout dari ${config.name}?'),
-                        content: const Text(
-                          'Sesi login akan dihapus dari perangkat ini dan '
-                          'server. Video yang sudah terunduh tidak terhapus.',
+                        title: Text(AppStrings.logoutFrom(config.name)),
+                        content: Text(
+                          AppStrings.logoutConfirmContent,
                         ),
                         actions: [
                           TextButton(
                             onPressed: () =>
                                 Navigator.pop(dialogContext, false),
-                            child: const Text('Batal'),
+                            child: Text(AppStrings.cancel),
                           ),
                           FilledButton(
                             onPressed: () => Navigator.pop(dialogContext, true),
                             style: FilledButton.styleFrom(
                                 backgroundColor: AppColors.red),
-                            child: const Text('Logout'),
+                            child: Text(AppStrings.logout),
                           ),
                         ],
                       ),
@@ -170,7 +169,7 @@ class _LegalLinks extends StatelessWidget {
           onPressed: () =>
               Navigator.of(context).pushNamed(Routes.legal, arguments: 0),
           child: Text(
-            "Kebijakan Privasi",
+            AppStrings.privacyPolicy,
             style: TextStyle(
                 color: mutedColor,
                 fontSize: 12,
@@ -182,7 +181,7 @@ class _LegalLinks extends StatelessWidget {
           onPressed: () =>
               Navigator.of(context).pushNamed(Routes.legal, arguments: 1),
           child: Text(
-            "Ketentuan Layanan",
+            AppStrings.termsOfService,
             style: TextStyle(
                 color: mutedColor,
                 fontSize: 12,
@@ -277,8 +276,8 @@ class _UpdateSectionState extends State<_UpdateSection> {
             ],
           ),
           const SizedBox(height: 12),
-          _infoRow("Versi", "v$_version ($_buildNumber)", mutedColor),
-          _infoRow("Package", "com.ekalliptus.saver", mutedColor),
+          _infoRow(AppStrings.version, "v$_version ($_buildNumber)", mutedColor),
+          _infoRow(AppStrings.packageLabel, "com.ekalliptus.saver", mutedColor),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -389,8 +388,10 @@ class _PlatformTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   isLoggedIn
-                      ? "Logged in${cookie!.username != null ? ' (${cookie!.username})' : ''}"
-                      : "Belum login",
+                      ? cookie!.username != null
+                          ? AppStrings.loggedInWith(cookie!.username!)
+                          : AppStrings.loggedIn
+                      : AppStrings.notLoggedIn,
                   style: TextStyle(
                     color: isLoggedIn
                         ? AppColors.green.withOpacity(0.8)
@@ -409,7 +410,7 @@ class _PlatformTile extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               ),
-              child: const Text("Logout", style: TextStyle(fontSize: 12)),
+              child: Text(AppStrings.logout, style: TextStyle(fontSize: 12)),
             )
           else
             ElevatedButton(
@@ -423,7 +424,7 @@ class _PlatformTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20)),
                 elevation: 0,
               ),
-              child: const Text("Login", style: TextStyle(fontSize: 12)),
+              child: Text(AppStrings.login, style: TextStyle(fontSize: 12)),
             ),
         ],
       ),

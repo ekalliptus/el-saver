@@ -154,9 +154,9 @@ class _QualityPickerState extends State<_QualityPicker> {
                     ),
                   ),
                   icon: const Icon(Icons.music_note, color: Colors.white),
-                  label: const Text(
-                    "Audio (MP3)",
-                    style: TextStyle(color: Colors.white),
+                  label: Text(
+                    AppStrings.audioMp3,
+                    style: const TextStyle(color: Colors.white),
                   ),
                   onPressed: () {
                     final bloc = context.read<DownloaderBloc>();

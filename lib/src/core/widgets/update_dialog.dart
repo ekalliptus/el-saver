@@ -42,7 +42,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     if (path == null) {
       setState(() {
         _phase = _Phase.error;
-        _errorMsg = "Download gagal. Coba lagi.";
+        _errorMsg = AppStrings.downloadFailedRetry;
       });
       return;
     }
@@ -57,7 +57,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     if (!opened) {
       setState(() {
         _phase = _Phase.error;
-        _errorMsg = "Tidak bisa membuka installer sistem. Coba lagi.";
+        _errorMsg = AppStrings.cannotOpenSystemInstaller;
       });
     }
   }
@@ -131,9 +131,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
   Widget _buildTitle(Color fgColor) {
     final titles = {
       _Phase.info: AppStrings.updateAvailable,
-      _Phase.downloading: "Mengunduh Update...",
-      _Phase.waitingInstaller: "Menunggu installer...",
-      _Phase.error: "Gagal",
+      _Phase.downloading: AppStrings.downloadingUpdate,
+      _Phase.waitingInstaller: AppStrings.waitingForInstaller,
+      _Phase.error: AppStrings.failed,
     };
     return Text(
       titles[_phase]!,
@@ -160,14 +160,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
     }
     if (_phase == _Phase.waitingInstaller) {
       return Text(
-        "Ikuti popup installer yang muncul di layar untuk menyelesaikan "
-        "pembaruan. Aplikasi jangan ditutup sampai install selesai.",
+        AppStrings.installerPopupInstruction,
         textAlign: TextAlign.center,
         style: TextStyle(color: mutedColor, fontSize: 13),
       );
     }
     return Text(
-      "v${info.currentVersionName} → v${info.versionName}",
+      AppStrings.versionUpgrade(info.currentVersionName, info.versionName),
       style: TextStyle(color: mutedColor, fontSize: 13),
     );
   }
@@ -235,7 +234,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
             ),
             const SizedBox(height: 12),
             Text(
-              "Jangan tutup dialog ini",
+              AppStrings.doNotCloseThisDialog,
               style: TextStyle(color: mutedColor, fontSize: 11),
             ),
           ],
@@ -255,14 +254,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
-                child: const Text("Buka Installer Lagi"),
+                child: Text(AppStrings.reopenInstaller),
               ),
             ),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child:
-                  Text("Tutup", style: TextStyle(color: mutedColor)),
+                  Text(AppStrings.close, style: TextStyle(color: mutedColor)),
             ),
           ],
         );
@@ -283,14 +282,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
-                    child: const Text("Coba Lagi"),
+                    child: Text(AppStrings.tryAgain),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextButton(
                     onPressed: _openSystemInstaller,
-                    child: Text("Install Manual",
+                    child: Text(AppStrings.installManually,
                         style: TextStyle(color: mutedColor)),
                   ),
                 ),
@@ -301,7 +300,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
             // the user in this dialog.
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text("Tutup", style: TextStyle(color: mutedColor)),
+              child: Text(AppStrings.close, style: TextStyle(color: mutedColor)),
             ),
           ],
         );
@@ -317,7 +316,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Tidak bisa membuka installer")),
+          SnackBar(content: Text(AppStrings.cannotOpenInstaller)),
         );
       }
     }

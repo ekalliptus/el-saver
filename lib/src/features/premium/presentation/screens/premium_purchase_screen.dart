@@ -7,6 +7,7 @@ import 'package:el_saver/src/core/common_widgets/toast.dart';
 import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/utils/app_colors.dart';
 import 'package:el_saver/src/core/utils/app_enums.dart';
+import 'package:el_saver/src/core/utils/app_strings.dart';
 
 String formatRupiah(int amount) =>
     'Rp ${amount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
@@ -53,7 +54,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadError =
-          'Tidak bisa memuat paket. Periksa koneksi internet lalu coba lagi.');
+          AppStrings.loadPackagesFailed);
     }
   }
 
@@ -72,7 +73,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
       if (!mounted) return;
       setState(() => _creating = false);
       buildToast(
-        msg: 'Gagal membuat order. Coba lagi.',
+        msg: AppStrings.createOrderFailed,
         type: ToastType.error,
       );
     }
@@ -93,7 +94,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
           _settled = true;
           timer.cancel();
           buildToast(
-            msg: 'Pembayaran terkonfirmasi! Premium aktif 🎉',
+            msg: AppStrings.paymentConfirmed,
             type: ToastType.success,
           );
           Navigator.of(context).pop(true);
@@ -111,25 +112,25 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
         _settled = true;
         _pollTimer?.cancel();
         buildToast(
-          msg: 'Pembayaran terkonfirmasi! Premium aktif 🎉',
+          msg: AppStrings.paymentConfirmed,
           type: ToastType.success,
         );
         Navigator.of(context).pop(true);
       } else if (!_settled) {
         buildToast(
-          msg: 'Belum terkonfirmasi. Kami terus memeriksa otomatis.',
+          msg: AppStrings.paymentNotConfirmedYet,
           type: ToastType.info,
         );
       }
     } catch (_) {
-      buildToast(msg: 'Gagal memeriksa status. Coba lagi.', type: ToastType.error);
+      buildToast(msg: AppStrings.checkStatusFailed, type: ToastType.error);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Beli Premium')),
+      appBar: AppBar(title: Text(AppStrings.buyPremium)),
       body: _order != null ? _buildWaiting() : _buildPackages(),
     );
   }
@@ -150,7 +151,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _loadPackages,
-              child: const Text('Coba Lagi'),
+              child: Text(AppStrings.tryAgain),
             ),
           ],
         ),
@@ -169,17 +170,15 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
       children: [
         Card(
           color: AppColors.primaryColor.withValues(alpha: 0.08),
-          child: const Padding(
-            padding: EdgeInsets.all(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
             child: Row(
               children: [
-                Icon(Icons.workspace_premium, color: AppColors.primaryColor),
-                SizedBox(width: 12),
+                const Icon(Icons.workspace_premium, color: AppColors.primaryColor),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Premium = tanpa iklan, sekali bayar untuk perangkat ini. '
-                    'Pilih paket, bayar, dan lisensi terpasang otomatis — '
-                    'tanpa memasukkan kode manual.',
+                    AppStrings.premiumInfoCard,
                   ),
                 ),
               ],
@@ -204,8 +203,8 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(
                 pkg.days == null
-                    ? 'Aktif selamanya di perangkat ini'
-                    : 'Aktif ${pkg.days} hari di perangkat ini',
+                    ? AppStrings.activeForeverOnDevice
+                    : AppStrings.activeDaysOnDevice(pkg.days!),
               ),
               trailing: FilledButton(
                 onPressed: _creating ? null : () => _buy(pkg),
@@ -240,7 +239,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Pesanan ${order.packageName}',
+                        AppStrings.orderTitle(order.packageName),
                         style: const TextStyle(
                             fontWeight: FontWeight.w600, fontSize: 16),
                       ),
@@ -262,22 +261,25 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Scan dengan GoPay / DANA / OVO / m-banking',
-                    style: TextStyle(fontSize: 12),
+                  Text(
+                    AppStrings.scanToPay,
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ] else ...[
                   Text(order.paymentInfo),
                 ],
                 const SizedBox(height: 12),
                 Text(
-                  'Total: ${formatRupiah(order.price)}'
-                  '${order.grossAmount.isNotEmpty && !order.grossAmount.endsWith('.00') ? '  (${order.grossAmount})' : ''}',
+                  AppStrings.totalLabel(formatRupiah(order.price)) +
+                      (order.grossAmount.isNotEmpty &&
+                              !order.grossAmount.endsWith('.00')
+                          ? '  (${order.grossAmount})'
+                          : ''),
                   style: const TextStyle(
                       fontWeight: FontWeight.w700, fontSize: 18),
                 ),
                 const SizedBox(height: 4),
-                Text('Nomor pesanan: ${order.orderId}',
+                Text(AppStrings.orderNumber(order.orderId),
                     style: const TextStyle(fontSize: 12)),
               ],
             ),
@@ -295,8 +297,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Menunggu pembayaran. Lisensi akan aktif otomatis begitu '
-                'pembayaran terdeteksi.',
+                AppStrings.waitingForPayment,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -306,14 +307,14 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
         OutlinedButton.icon(
           onPressed: _checkNow,
           icon: const Icon(Icons.refresh),
-          label: const Text('Saya Sudah Bayar — Cek Sekarang'),
+          label: Text(AppStrings.iAlreadyPaidCheckNow),
         ),
         TextButton(
           onPressed: () {
             _pollTimer?.cancel();
             Navigator.of(context).pop();
           },
-          child: const Text('Batalkan'),
+          child: Text(AppStrings.cancelOrder),
         ),
       ],
     );

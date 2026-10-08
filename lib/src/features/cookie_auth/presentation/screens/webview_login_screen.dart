@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../../core/utils/app_colors.dart';
 import '../../../../core/utils/app_constants.dart';
+import '../../../../core/utils/app_strings.dart';
 import '../../data/models/platform_login_config.dart';
 import '../../data/services/cookie_extraction_service.dart';
 import '../bloc/account_bloc.dart';
@@ -27,7 +28,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
   bool _loading = true;
   bool _extracted = false;
   bool _extracting = false;
-  String _statusText = "Menunggu login...";
+  String _statusText = AppStrings.waitingForLogin;
 
   bool get _isManual => _config?.manualCompletion ?? false;
 
@@ -43,7 +44,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content:
-              Text("Login ${widget.platform.name} belum didukung di aplikasi."),
+              Text(AppStrings.platformNotSupported(widget.platform.name)),
           backgroundColor: AppColors.red,
         ));
         Navigator.of(context).pop(false);
@@ -51,7 +52,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
       return;
     }
     if (config.manualCompletion) {
-      _statusText = "Login di halaman ini, lalu tekan tombol 'Selesai Login'.";
+      _statusText = AppStrings.manualLoginInstruction;
     }
 
     _controller = WebViewController()
@@ -66,7 +67,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
             if (_isManual && !_extracted) {
               if (mounted) {
                 setState(() =>
-                    _statusText = "Login terdeteksi, mengambil cookies...");
+                    _statusText = AppStrings.loginDetectedExtracting);
               }
               _tryExtractCookies("deepLink:${uri.scheme}");
             }
@@ -116,7 +117,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
 
     if (isSuccessPage) {
       if (mounted) {
-        setState(() => _statusText = "Login terdeteksi, mengambil cookies...");
+        setState(() => _statusText = AppStrings.loginDetectedExtracting);
       }
       // Delay to let cookies propagate, then extract
       Future.delayed(const Duration(seconds: 2), () {
@@ -139,7 +140,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
       );
 
       if (cookies.isEmpty) {
-        _handleExtractionFailed(trigger, "Cookies belum tersedia.");
+        _handleExtractionFailed(trigger, AppStrings.cookiesNotAvailable);
         return;
       }
 
@@ -153,11 +154,11 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
       } else {
         _handleExtractionFailed(
           trigger,
-          "Login belum terdeteksi. Pastikan sudah sign-in, lalu tekan 'Selesai Login'.",
+          AppStrings.loginNotDetected,
         );
       }
     } catch (_) {
-      _handleExtractionFailed(trigger, "Gagal mengambil cookies.");
+      _handleExtractionFailed(trigger, AppStrings.extractCookiesFailed);
     } finally {
       _extracting = false;
     }
@@ -214,17 +215,17 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
               onPressed: () => Navigator.of(context).pop(false),
             ),
             title: Text(
-              "Login ${config.name}",
+              AppStrings.loginTitle(config.name),
               style: TextStyle(color: fgColor, fontSize: 16),
             ),
             actions: [
               if (_isManual)
                 TextButton(
                   onPressed: () {
-                    setState(() => _statusText = 'Mengambil cookies...');
+                    setState(() => _statusText = AppStrings.extractingCookies);
                     _tryExtractCookies('manual');
                   },
-                  child: const Text('Selesai Login'),
+                  child: Text(AppStrings.finishLogin),
                 ),
               if (_loading)
                 const Padding(
