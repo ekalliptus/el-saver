@@ -43,20 +43,25 @@ class PremiumService {
 
   /// Stable per-device identifier for server-side license binding.
   /// Settings.Secure.ANDROID_ID via the native `device_id` channel — unique
-  /// per device + signing key and survives OS updates. [AndroidDeviceInfo.id]
-  /// (Build.ID) is only a fallback: it's the dotted OS build string shared by
-  /// every device on that Android version, which the server's device_id
-  /// format rejects.
+  /// per device + signing key and survives OS updates. Build.ID is blended
+  /// into a synthetic fallback (hashed fingerprint) so this NEVER returns
+  /// null on Android; the server's legacy_device_id migration covers
+  /// transitions when the id changes.
   Future<String?> _resolveDeviceId() async {
+    if (!Platform.isAndroid) return null;
     String? current;
     try {
       current = await _deviceIdChannel.invokeMethod<String>('androidId');
     } catch (_) {
-      // Fall through to Build.ID below.
+      // Fall through to the synthetic fallback below.
     }
     if (current == null || current.isEmpty) {
-      if (!Platform.isAndroid) return null;
-      current = (await DeviceInfoPlugin().androidInfo).id;
+      try {
+        final android = await DeviceInfoPlugin().androidInfo;
+        current = _fnv1a(android.fingerprint) + _fnv1a('${android.fingerprint}|els');
+      } catch (_) {
+        return null;
+      }
     }
     if (current.isEmpty) return null;
     final normalized = current.toLowerCase();
@@ -66,6 +71,15 @@ class PremiumService {
     }
     await _storage.write(key: _deviceIdKey, value: normalized);
     return normalized;
+  }
+
+  static String _fnv1a(String input) {
+    var hash = 0x811c9dc5;
+    for (final code in input.codeUnits) {
+      hash = (hash ^ code) & 0xFFFFFFFF;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
   }
 
   /// Fetches the available purchase packages from the server.
@@ -88,6 +102,9 @@ class PremiumService {
 
   /// Creates a purchase order and reserves a license for this device.
   Future<OrderInfo> createOrder(String packageId) async {
+    // Lazy retry: a failed startup resolve must not permanently brick
+    // purchasing for the session.
+    _deviceId ??= await _resolveDeviceId();
     if (_deviceId == null) {
       throw Exception('Perangkat tidak teridentifikasi.');
     }

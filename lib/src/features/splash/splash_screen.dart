@@ -162,6 +162,10 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _navigateToPermissionSetup() {
     if (mounted && !_hasNavigated) {
+      // A back-press during init can leave delayed callbacks running after
+      // the user has moved on; never yank them into permission setup then.
+      final route = ModalRoute.of(context);
+      if (route == null || !route.isCurrent) return;
       _hasNavigated = true;
       Navigator.of(context)
           .pushNamedAndRemoveUntil(Routes.permissionSetup, (route) => false);
@@ -170,6 +174,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _navigateToDownloader() {
     if (mounted && !_hasNavigated) {
+      final route = ModalRoute.of(context);
+      if (route == null || !route.isCurrent) return;
       _hasNavigated = true;
       Navigator.of(context)
           .pushNamedAndRemoveUntil(Routes.downloader, (route) => false);

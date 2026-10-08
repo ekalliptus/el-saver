@@ -59,9 +59,12 @@ echo ">> Python venv + deps..."
 [[ -d "$APP_DIR/venv" ]] || python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install -q --upgrade pip
 "$APP_DIR/venv/bin/pip" install -q -r "$SRC_DIR/requirements.txt"
-# yt-dlp on YouTube needs the latest master (n-challenge fixes ship fast)
-"$APP_DIR/venv/bin/pip" install -q -U --pre \
-  "yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git" || true
+# yt-dlp on YouTube breaks often ("page needs to be reloaded") — always run
+# the latest nightly from PyPI (the git-master install hangs/skips silently).
+sudo -u anrsaver "$APP_DIR/venv/bin/pip" install -q -U --pre --force-reinstall \
+  --no-cache-dir "yt-dlp[default]" || \
+  "$APP_DIR/venv/bin/pip" install -q -U --pre --force-reinstall \
+  --no-cache-dir "yt-dlp[default]"
 
 echo ">> deno (JS runtime for yt-dlp's YouTube EJS solver)..."
 # Pinned release installed straight from GitHub — no mutable install script.

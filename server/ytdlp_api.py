@@ -110,8 +110,9 @@ class VideoRequest(BaseModel):
     mode: str = "video"
 
 
-def _check_key(x_api_key: str = Header()):
-    if not hmac.compare_digest(x_api_key, API_KEY):
+def _check_key(x_api_key: str | None = Header(None)):
+    # Missing header -> 401 (Header(None)), not FastAPI's default 422.
+    if not x_api_key or not hmac.compare_digest(x_api_key, API_KEY):
         raise HTTPException(401, "Invalid API key")
 
 

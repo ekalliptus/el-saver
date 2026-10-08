@@ -115,8 +115,10 @@ class CookiePayload(BaseModel):
     cookies: str  # "key1=val1; key2=val2; ..."
 
 
-def _check_key(x_api_key: str = Header()):
-    if not _hmac.compare_digest(x_api_key, API_KEY):
+def _check_key(x_api_key: str | None = Header(None)):
+    # Header(None) so a missing header returns 401 (not FastAPI's 422), which
+    # is the honest status for "unauthenticated".
+    if not x_api_key or not _hmac.compare_digest(x_api_key, API_KEY):
         raise HTTPException(401, "Invalid API key")
 
 

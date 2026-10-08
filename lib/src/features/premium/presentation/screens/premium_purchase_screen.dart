@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -60,6 +61,22 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
     }
   }
 
+  /// Prefer the server's own validation message (it names the real problem,
+  /// e.g. "device_id tidak valid") over a generic retry toast.
+  String _describeOrderError(Object error) {
+    if (error is DioException) {
+      final detail = error.response?.data;
+      if (detail is Map && detail['detail'] is String) {
+        return detail['detail'] as String;
+      }
+    }
+    final text = error.toString();
+    if (text.contains('Exception: ')) {
+      return text.split('Exception: ').last;
+    }
+    return AppStrings.createOrderFailed;
+  }
+
   Future<void> _buy(PremiumPackage pkg) async {
     if (_creating) return;
     setState(() => _creating = true);
@@ -71,13 +88,10 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
         _creating = false;
       });
       _startPolling();
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _creating = false);
-      buildToast(
-        msg: AppStrings.createOrderFailed,
-        type: ToastType.error,
-      );
+      buildToast(msg: _describeOrderError(e), type: ToastType.error);
     }
   }
 
