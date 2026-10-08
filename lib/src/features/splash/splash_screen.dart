@@ -10,6 +10,7 @@ import 'package:el_saver/src/core/providers/language_provider.dart';
 import 'package:el_saver/src/container_injector.dart';
 import '../../config/routes_manager.dart';
 import '../../core/utils/app_assets.dart';
+import '../../core/common_widgets/fancy_loader.dart';
 import '../../core/utils/app_constants.dart';
 import '../../core/utils/preload_svg_assets.dart';
 import 'dart:developer' as developer;
@@ -277,16 +278,7 @@ class _SplashScreenState extends State<SplashScreen>
                       child: child,
                     );
                   },
-                  child: SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.white.withOpacity(0.2),
-                      ),
-                    ),
-                  ),
+                  child: const FancyLoader(size: 36, color: Colors.white),
                 ),
 
                 SizedBox(height: size.height * 0.06),

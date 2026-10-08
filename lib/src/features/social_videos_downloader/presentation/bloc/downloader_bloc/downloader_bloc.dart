@@ -107,6 +107,7 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
               link: audioUrl,
               isAudio: true,
               mode: 'audio',
+              extension: '.mp3',
             ),
           ],
           stats: event.video.stats,
@@ -136,7 +137,7 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
     );
     if (resolved == null) {
       emit(DownloaderSaveVideoFailure(
-          resolutionError ?? 'Gagal menyiapkan media'));
+          resolutionError ?? AppStrings.failedToPrepareMedia));
       return;
     }
     final selectedLink = resolved.url as String;
@@ -397,6 +398,9 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
         newDownloads = parsed;
 
         for (int i = 0; i < newDownloads.length; i++) {
+          // An in-flight download owns its own state; the final file only
+          // appears when it finishes, so a reload here must not flag it.
+          if (_cancelTokens.containsKey(newDownloads[i].path)) continue;
           final file = File(newDownloads[i].path);
           if (!file.existsSync()) {
             newDownloads[i] =

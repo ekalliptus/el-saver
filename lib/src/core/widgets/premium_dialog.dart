@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../config/routes_manager.dart';
 import '../services/premium_service.dart';
 import '../utils/app_colors.dart';
+import '../common_widgets/fancy_loader.dart';
 
 /// Paywall + redeem dialog. Shows benefits, a license key field, and the
 /// redeem action. [onPremiumChanged] fires after a successful redeem.
@@ -102,9 +103,13 @@ class _PremiumDialogState extends State<_PremiumDialog> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(context);
-                  Navigator.of(context).pushNamed(Routes.premiumPurchase);
+                  // Purchase screen pops with `true` once premium is active;
+                  // surface it so the caller refreshes ads/crown immediately.
+                  final activated = await Navigator.of(context)
+                      .pushNamed(Routes.premiumPurchase);
+                  if (activated == true) widget.onPremiumChanged?.call();
                 },
                 icon: const Icon(Icons.shopping_bag_outlined, size: 18),
                 label: const Text('Beli Premium'),
@@ -150,10 +155,7 @@ class _PremiumDialogState extends State<_PremiumDialog> {
               FilledButton.icon(
                 onPressed: _redeeming ? null : () => _redeem(),
                 icon: _redeeming
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const FancyLoader(size: 12, color: Colors.white)
                     : const Icon(Icons.key_rounded, size: 18),
                 label: Text(_redeeming ? 'Memeriksa...' : 'Aktifkan'),
               ),

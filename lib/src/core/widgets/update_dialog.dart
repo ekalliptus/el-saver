@@ -99,16 +99,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         return const Icon(Icons.system_update,
             color: AppColors.primaryColor, size: 48);
       case _Phase.downloading:
-        return SizedBox(
-          width: 48,
-          height: 48,
-          child: CircularProgressIndicator(
-            value: _progress > 0 ? _progress : null,
-            strokeWidth: 3,
-            valueColor:
-                const AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
-          ),
-        );
+        return const FancyLoader(size: 40);
       case _Phase.waitingInstaller:
         return const FancyLoader(size: 40, color: Colors.orange);
       case _Phase.error:

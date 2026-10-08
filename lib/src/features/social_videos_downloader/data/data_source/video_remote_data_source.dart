@@ -5,6 +5,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import '../../../../core/error/failure.dart';
+import '../../domain/entities/download_item.dart';
 import '../../../../core/helpers/dio_helper.dart';
 import '../../../../core/utils/app_constants.dart';
 import '../../../../core/utils/app_strings.dart';
@@ -350,8 +351,21 @@ class TiktokVideoRemoteDataSource implements VideoBaseRemoteDataSource {
       );
     } on DioException catch (error) {
       final body = error.response?.data;
-      if (body is Map && body['detail'] != null) {
-        throw Exception(body['detail'].toString());
+      if (body is Map) {
+        // Trust the server's own classification: a substring guess on the
+        // client misses half the auth-required variants (private video,
+        // members-only, ...) and never opens the cookie login flow.
+        if (body['errorType']?.toString() == 'auth-required') {
+          throw AuthRequiredFailure(
+            platform: DownloadItem.detectPlatform(
+                data['url']?.toString() ?? ''),
+            sourceCode: 'ytdlp',
+            message: body['detail']?.toString() ?? '',
+          );
+        }
+        if (body['detail'] != null) {
+          throw Exception(body['detail'].toString());
+        }
       }
       rethrow;
     }

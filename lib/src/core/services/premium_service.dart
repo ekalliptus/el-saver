@@ -157,7 +157,7 @@ class PremiumService {
         _redeemUrl,
         options: Options(headers: {'X-Api-Key': ApiConfig.backendApiKey}),
         data: {
-        'key': licenseKey.trim(),
+        'key': licenseKey.trim().toUpperCase(),
         'device_id': _deviceId,
         if (_legacyDeviceId != null) 'legacy_device_id': _legacyDeviceId,
       },

@@ -52,8 +52,12 @@ class VideoRepo implements VideoBaseRepo {
       return Right(await remoteDataSource.resolveMedia(sourceUrl, option));
     } on DioException catch (error) {
       return Left(ErrorHandler.handle(error).failure);
-    } catch (_) {
-      return Left(ServerFailure());
+    } catch (error) {
+      // Data source failures are already localized user-facing strings
+      // ("Exception: <pesan>"); keep them instead of a generic fallback.
+      final text = error.toString();
+      return Left(ServerFailure(
+          message: text.startsWith('Exception: ') ? text.substring(11) : text));
     }
   }
 

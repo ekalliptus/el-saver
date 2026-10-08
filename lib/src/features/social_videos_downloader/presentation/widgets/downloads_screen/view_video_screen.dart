@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../../../core/utils/app_colors.dart';
 import '../../../../../core/utils/app_strings.dart';
+import '../../../../../core/common_widgets/fancy_loader.dart';
 
 class ViewVideoScreen extends StatefulWidget {
   final String videoPath;
@@ -133,7 +134,7 @@ class _ViewVideoScreenState extends State<ViewVideoScreen> {
     }
 
     if (!_isInitialized) {
-      return const CircularProgressIndicator(color: AppColors.primaryColor);
+      return const FancyLoader(size: 32);
     }
 
     return AspectRatio(

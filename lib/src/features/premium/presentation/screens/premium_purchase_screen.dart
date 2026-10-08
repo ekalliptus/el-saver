@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:el_saver/src/core/common_widgets/toast.dart';
+import 'package:el_saver/src/container_injector.dart' show sl;
 import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/utils/app_colors.dart';
 import 'package:el_saver/src/core/utils/app_enums.dart';
@@ -26,7 +27,9 @@ class PremiumPurchaseScreen extends StatefulWidget {
 }
 
 class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
-  final PremiumService _premium = PremiumService();
+  // The app-lifetime singleton: a throwaway instance would mark premium on
+  // itself after payment and the rest of the app would never find out.
+  final PremiumService _premium = sl<PremiumService>();
   List<PremiumPackage>? _packages;
   String? _loadError;
   OrderInfo? _order;

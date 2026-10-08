@@ -158,6 +158,7 @@ class VideoModel extends Video {
           link: pickerAudio,
           isAudio: true,
           mode: 'audio',
+          extension: '.mp3',
         ));
       }
     }
@@ -169,6 +170,7 @@ class VideoModel extends Video {
         link: audioUrl,
         isAudio: true,
         mode: 'audio',
+        extension: '.mp3',
       ));
     }
 
@@ -238,6 +240,7 @@ class VideoModel extends Video {
         link: musicUrl,
         isAudio: true,
         mode: 'audio',
+        extension: '.mp3',
       ));
     }
 

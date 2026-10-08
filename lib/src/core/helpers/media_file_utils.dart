@@ -58,7 +58,7 @@ class MediaFileUtils {
         text.startsWith('{"detail"')) {
       throw const FormatException('Server returned an error body');
     }
-    if (expected > 0 && received != expected) {
+    if (expected > 0 && received < expected * 0.95) {
       throw const FormatException('Incomplete download');
     }
     final extension = detectExtension(bytes);

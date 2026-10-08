@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/services/cookie_extraction_service.dart';
@@ -56,17 +58,18 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
 
     await cookieRepo.saveCookies(cookie);
 
-    // Emit success immediately so the UI isn't blocked on the backend sync
-    // (which can take several seconds), then push the cookies to the server.
+    // Emit success immediately, then push the cookies to the server without
+    // awaiting it: bloc events are sequential, so an in-handler await would
+    // keep the accounts list stale (and pop an orange false-alarm snackbar)
+    // for as long as the backend round-trip takes.
     emit(LoginSuccess(platform: event.platform, synced: false));
     add(LoadAccounts());
 
-    final synced = await cookieRepo.syncToServer(cookie);
-    // The webview route pops (and closes this bloc) as soon as the first
-    // LoginSuccess lands; the bloc may already be closed here.
-    if (synced && !isClosed) {
-      emit(LoginSuccess(platform: event.platform, synced: true));
-    }
+    unawaited(cookieRepo.syncToServer(cookie).then((synced) {
+      if (synced && !isClosed) {
+        emit(LoginSuccess(platform: event.platform, synced: true));
+      }
+    }));
   }
 
   Future<void> _onLogout(

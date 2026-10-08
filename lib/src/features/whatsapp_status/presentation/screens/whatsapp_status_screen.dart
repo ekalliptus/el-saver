@@ -172,14 +172,7 @@ class _StatusTile extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(6),
                   child: saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                      ? const FancyLoader(size: 12, color: Colors.white)
                       : const Icon(Icons.download_rounded,
                           color: Colors.white, size: 18),
                 ),
