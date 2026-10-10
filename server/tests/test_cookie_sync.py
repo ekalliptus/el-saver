@@ -103,11 +103,11 @@ class QrisTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cookie_sync._tlv_parse("zz99abc")
 
-    def test_order_amount_cents_always_between_1_and_99(self):
+    def test_order_unique_suffix_always_between_1_and_99(self):
         for seed in range(0, 300):
             order_id = f"{seed:04x}abcdef012345"
-            cents = cookie_sync._order_amount_cents(order_id)
-            self.assertTrue(1 <= cents <= 99)
+            suffix = cookie_sync._order_unique_suffix(order_id)
+            self.assertTrue(1 <= suffix <= 99)
 
 
 class StoreIntegrityTests(unittest.TestCase):
@@ -257,6 +257,30 @@ class OrderFlowTests(unittest.TestCase):
         self.assertEqual(again["already_paid"], True)
 
 
+    def test_order_gross_amount_is_whole_rupiah(self):
+        # Unique suffix must be whole rupiah (15059), never a decimal
+        # (15000.59 renders as "Rp15.000,59" in e-wallets — confusing).
+        order = self._order("10.9.7.9")
+        self.assertEqual(order["gross_amount"], str(int(order["gross_amount"])))
+
+    def test_history_lists_orders_for_device_only(self):
+        mine = self._order("10.9.7.10", device="d" * 16)
+        self._order("10.9.7.11", device="e" * 16)  # someone else
+        response = cookie_sync.premium_order_history(
+            cookie_sync.HistoryPayload(device_id="d" * 16),
+            _req("10.9.7.12"), cookie_sync.API_KEY,
+        )
+        ids = [r["order_id"] for r in response["orders"]]
+        self.assertEqual(ids, [mine["order_id"]])
+
+    def test_order_status_regenerates_qris_for_pending(self):
+        order = self._order("10.9.7.13")
+        response = cookie_sync.premium_order_status(
+            order["order_id"], cookie_sync.API_KEY)
+        entries = dict(cookie_sync._tlv_parse(response["qris"]))
+        self.assertEqual(entries["54"], order["gross_amount"])
+
+
 class WebhookTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -346,9 +370,14 @@ class WebhookTests(unittest.TestCase):
 
     def test_webhook_amount_comparison_is_numeric_not_string(self):
         amount = self.order["gross_amount"]
-        whole, cents = amount.split(".")
-        # "15000.50" vs "15000.5": numerically equal, string-different.
-        equivalent = f"{whole}.{cents.rstrip('0') or '0'}"
+        if "." in amount:
+            whole, cents = amount.split(".")
+            # "15000.50" vs "15000.5": numerically equal, string-different.
+            equivalent = f"{whole}.{cents.rstrip('0') or '0'}"
+        else:
+            # Whole-rupiah amounts: compare "15059" against a legacy decimal
+            # spelling of the same value to prove numeric matching.
+            equivalent = f"{amount}.00"
         response = cookie_sync.premium_webhook(
             PaymentWebhookPayload(
                 gross_amount=equivalent,

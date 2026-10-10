@@ -14,8 +14,11 @@ import '../features/social_videos_downloader/presentation/screens/downloads_scre
 import '../features/social_videos_downloader/presentation/widgets/downloads_screen/view_video_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/whatsapp_status/presentation/screens/whatsapp_status_screen.dart';
-import '../features/premium/presentation/screens/premium_purchase_screen.dart';
+
 import '../core/screens/permission_setup_screen.dart';
+import '../features/premium/presentation/screens/premium_purchase_screen.dart';
+import '../features/premium/presentation/screens/purchase_history_screen.dart';
+import '../core/services/premium_service.dart';
 
 class Routes {
   static const String splash = "/splash";
@@ -28,6 +31,7 @@ class Routes {
   static const String legal = "/legal";
   static const String whatsappStatus = "/whatsappStatus";
   static const String premiumPurchase = "/premiumPurchase";
+  static const String premiumHistory = "/premiumHistory";
 }
 
 class AppRounter {
@@ -54,8 +58,16 @@ class AppRounter {
         return MaterialPageRoute(
             builder: (context) => const WhatsappStatusScreen());
       case Routes.premiumPurchase:
+        // Resume support: pass an OrderInfo to reopen a pending order.
+        final resumed = setting.arguments is OrderInfo
+            ? setting.arguments as OrderInfo
+            : null;
         return MaterialPageRoute(
-            builder: (context) => const PremiumPurchaseScreen());
+            builder: (context) =>
+                PremiumPurchaseScreen(resumeOrder: resumed));
+      case Routes.premiumHistory:
+        return MaterialPageRoute(
+            builder: (context) => const PurchaseHistoryScreen());
       case Routes.viewVideo:
         developer.log('✅ Creating ViewVideoScreen route', name: 'AppRouter');
         return MaterialPageRoute(

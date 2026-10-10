@@ -1335,6 +1335,51 @@ class AppStrings {
     }
   }
 
+  static String get purchaseHistory {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Riwayat Pembelian";
+      case SupportedLanguage.english:
+        return "Purchase History";
+    }
+  }
+
+  static String get emptyPurchaseHistory {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Belum ada riwayat pembelian.";
+      case SupportedLanguage.english:
+        return "No purchases yet.";
+    }
+  }
+
+  static String get statusPending {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Menunggu Bayar";
+      case SupportedLanguage.english:
+        return "Pending";
+    }
+  }
+
+  static String get statusPaid {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Lunas";
+      case SupportedLanguage.english:
+        return "Paid";
+    }
+  }
+
+  static String get resumePayment {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Lanjutkan Pembayaran";
+      case SupportedLanguage.english:
+        return "Resume Payment";
+    }
+  }
+
   static String get copyExactAmount {
     switch (_currentLanguage) {
       case SupportedLanguage.indonesian:

@@ -23,6 +23,7 @@ class PremiumService {
   static const _verifyUrl = '${ApiConfig.cookieSyncUrl}/premium/verify';
   static const _packagesUrl = '${ApiConfig.cookieSyncUrl}/premium/packages';
   static const _orderUrl = '${ApiConfig.cookieSyncUrl}/premium/order';
+  static const _historyUrl = '${ApiConfig.cookieSyncUrl}/premium/orders/history';
 
   bool _isPremium = false;
   String? _deviceId;
@@ -142,6 +143,41 @@ class PremiumService {
     return data['status']?.toString() ?? 'pending';
   }
 
+  /// All orders ever created by this device (pending + paid), newest first —
+  /// backs the purchase-history screen.
+  Future<List<OrderHistoryItem>> fetchOrderHistory() async {
+    final deviceId = _deviceId ?? await _resolveDeviceId();
+    if (deviceId == null) return const [];
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
+    final response = await dio.post(
+      _historyUrl,
+      options: Options(headers: {'X-Api-Key': ApiConfig.backendApiKey}),
+      data: {'device_id': deviceId},
+    );
+    final list = (response.data['orders'] as List? ?? [])
+        .whereType<Map>()
+        .map((e) => OrderHistoryItem.fromJson(e.cast<String, dynamic>()))
+        .toList();
+    return list;
+  }
+
+  /// Re-fetches one order as a resumable [OrderInfo] (QR regenerated
+  /// server-side), for continuing a pending payment.
+  Future<OrderInfo> resumeOrder(String orderId) async {
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
+    final response = await dio.get(
+      '$_orderUrl/$orderId',
+      options: Options(headers: {'X-Api-Key': ApiConfig.backendApiKey}),
+    );
+    return OrderInfo.fromJson((response.data as Map).cast<String, dynamic>());
+  }
+
   /// Redeems [licenseKey] for this device. Returns an error message on
   /// failure, or null on success.
   Future<String?> redeem(String licenseKey) async {
@@ -213,6 +249,44 @@ class PremiumService {
       // Offline: keep the cached entitlement.
     }
   }
+}
+
+/// One row of this device's purchase history.
+class OrderHistoryItem {
+  final String orderId;
+  final String packageId;
+  final String packageName;
+  final int price;
+  final String grossAmount;
+  final String status; // 'pending' | 'paid'
+  final DateTime? createdAt;
+  final DateTime? paidAt;
+
+  const OrderHistoryItem({
+    required this.orderId,
+    required this.packageId,
+    required this.packageName,
+    required this.price,
+    required this.grossAmount,
+    required this.status,
+    this.createdAt,
+    this.paidAt,
+  });
+
+  bool get isPending => status == 'pending';
+
+  factory OrderHistoryItem.fromJson(Map<String, dynamic> json) =>
+      OrderHistoryItem(
+        orderId: json['order_id'] as String,
+        packageId: json['package_id'] as String,
+        packageName:
+            json['package_name'] as String? ?? json['package_id'] as String,
+        price: (json['price'] as num).toInt(),
+        grossAmount: json['gross_amount']?.toString() ?? '',
+        status: json['status']?.toString() ?? 'pending',
+        createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+        paidAt: DateTime.tryParse(json['paid_at']?.toString() ?? ''),
+      );
 }
 
 /// A purchasable premium package advertised by the server.

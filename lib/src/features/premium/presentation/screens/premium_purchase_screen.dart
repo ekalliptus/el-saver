@@ -11,6 +11,7 @@ import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/utils/app_colors.dart';
 import 'package:el_saver/src/core/utils/app_enums.dart';
 import 'package:el_saver/src/core/utils/app_strings.dart';
+import '../../../../config/routes_manager.dart';
 import '../../../../core/common_widgets/fancy_loader.dart';
 import '../../../../core/common_widgets/skeleton_loader.dart';
 
@@ -21,7 +22,9 @@ String formatRupiah(int amount) =>
 /// auto-activate the license once the server marks the order paid. The user
 /// never types a license key.
 class PremiumPurchaseScreen extends StatefulWidget {
-  const PremiumPurchaseScreen({super.key});
+  /// Reopen a pending order (from the purchase-history screen).
+  final OrderInfo? resumeOrder;
+  const PremiumPurchaseScreen({super.key, this.resumeOrder});
 
   @override
   State<PremiumPurchaseScreen> createState() => _PremiumPurchaseScreenState();
@@ -42,6 +45,11 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
   void initState() {
     super.initState();
     _loadPackages();
+    final resumed = widget.resumeOrder;
+    if (resumed != null) {
+      _order = resumed;
+      _startPolling();
+    }
   }
 
   @override
@@ -150,7 +158,17 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(AppStrings.buyPremium)),
+      appBar: AppBar(
+        title: Text(AppStrings.buyPremium),
+        actions: [
+          IconButton(
+            tooltip: AppStrings.purchaseHistory,
+            icon: const Icon(Icons.receipt_long_outlined),
+            onPressed: () =>
+                Navigator.of(context).pushNamed(Routes.premiumHistory),
+          ),
+        ],
+      ),
       body: _order != null ? _buildWaiting() : _buildPackages(),
     );
   }
@@ -295,15 +313,17 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                   Text(order.paymentInfo),
                 ],
                 const SizedBox(height: 12),
-                Text(
-                  AppStrings.totalLabel(formatRupiah(order.price)) +
-                      (order.grossAmount.isNotEmpty &&
-                              !order.grossAmount.endsWith('.00')
-                          ? '  (${order.grossAmount})'
-                          : ''),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 18),
-                ),
+                Builder(builder: (_) {
+                  // gross includes the unique whole-rupiah suffix and is
+                  // what must be paid; show it formatted, never raw.
+                  final payable =
+                      int.tryParse(order.grossAmount) ?? order.price;
+                  return Text(
+                    AppStrings.totalLabel(formatRupiah(payable)),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 18),
+                  );
+                }),
                 if (order.grossAmount.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   OutlinedButton.icon(

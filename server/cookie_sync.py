@@ -505,9 +505,11 @@ def _qris_dynamic(static_qris: str, amount: str) -> str:
     return crc_input + _crc16(crc_input)
 
 
-def _order_amount_cents(order_id: str) -> int:
-    """Unique 1-99 cent suffix so each order's gross amount is unique and a
-    single payment report can be matched to exactly one order."""
+def _order_unique_suffix(order_id: str) -> int:
+    """Unique 1-99 whole-rupiah suffix added to the package price so each
+    order's gross amount is unique and a single payment report can be
+    matched to exactly one order. Whole rupiah (15.059, not 15.000,05):
+    Indonesian e-wallets render decimal QRIS amounts awkwardly."""
     return (int(order_id[:4], 16) % 99) + 1
 
 
@@ -539,8 +541,8 @@ def premium_order(payload: OrderPayload, request: Request, x_api_key: str = Head
         raise HTTPException(503, "QRIS belum dikonfigurasi")
 
     order_id = _uuid.uuid4().hex[:16]
-    cents = _order_amount_cents(order_id)
-    gross_amount = f"{pkg['price']}.{cents:02d}"
+    cents = _order_unique_suffix(order_id)
+    gross_amount = str(pkg['price'] + cents)
     try:
         qris_payload = _qris_dynamic(STATIC_QRIS, gross_amount)
     except (ValueError, IndexError) as error:
@@ -598,7 +600,11 @@ def premium_order_status(order_id: str, x_api_key: str = Header()):
         "package_id": order["package_id"],
         "price": order["price"],
         "gross_amount": order.get("gross_amount"),
-        "qris": order.get("qris"),
+        # The QR payload is deterministic (static QRIS + gross amount), so
+        # regenerate it instead of storing it — lets users resume a pending
+        # order on a fresh app install.
+        "qris": _qris_dynamic(STATIC_QRIS, order.get("gross_amount") or ""),
+        "package_name": PREMIUM_PACKAGES.get(order["package_id"], {}).get("name"),
     }
     if order["status"] == "paid":
         # Auto-activate on this device: the app stores the key itself.
@@ -607,6 +613,39 @@ def premium_order_status(order_id: str, x_api_key: str = Header()):
         result["license_key"] = order["license"]
         result["expires_at"] = entry.get("expires_at")
     return result
+
+
+class HistoryPayload(BaseModel):
+    device_id: str
+
+
+@app.post("/premium/orders/history")
+def premium_order_history(payload: HistoryPayload, request: Request,
+                          x_api_key: str = Header()):
+    """Purchase history for one device — lets the app list past orders and
+    resume a pending one after the user closed the app mid-payment."""
+    _check_key(x_api_key)
+    _rate_limit(request, "premium-history", 20, 60)
+    device_id = payload.device_id.strip().lower()
+    if not _DEVICE_RE.match(device_id):
+        raise HTTPException(400, "device_id tidak valid")
+    orders = _read_orders()
+    rows = []
+    for oid, o in orders.items():
+        if o.get("device_id") != device_id:
+            continue
+        rows.append({
+            "order_id": oid,
+            "package_id": o["package_id"],
+            "package_name": PREMIUM_PACKAGES.get(o["package_id"], {}).get("name"),
+            "price": o["price"],
+            "gross_amount": o.get("gross_amount"),
+            "status": o["status"],
+            "created_at": o.get("created_at"),
+            "paid_at": o.get("paid_at"),
+        })
+    rows.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    return {"orders": rows[:50]}
 
 
 def _activate_order_license(licenses: dict, order: dict) -> dict:
