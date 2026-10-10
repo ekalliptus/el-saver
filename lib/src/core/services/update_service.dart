@@ -80,6 +80,8 @@ class UpdateService {
         'download_url': '',
         'changelog': '',
         'is_forced': false,
+        // Production interstitial ad unit; empty -> Google test unit in-app.
+        'interstitial_ad_unit_id': '',
       });
       await config.fetchAndActivate();
       developer.log('Firebase Remote Config initialized',

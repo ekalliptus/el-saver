@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:el_saver/src/core/common_widgets/toast.dart';
@@ -303,6 +304,27 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.w700, fontSize: 18),
                 ),
+                if (order.grossAmount.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(
+                          ClipboardData(text: order.grossAmount));
+                      buildToast(
+                          msg: AppStrings.amountCopied,
+                          type: ToastType.success,
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: Text(AppStrings.copyExactAmount),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    AppStrings.exactAmountNote,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text(AppStrings.orderNumber(order.orderId),
                     style: const TextStyle(fontSize: 12)),

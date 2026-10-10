@@ -1335,6 +1335,33 @@ class AppStrings {
     }
   }
 
+  static String get copyExactAmount {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Salin Nominal";
+      case SupportedLanguage.english:
+        return "Copy Amount";
+    }
+  }
+
+  static String get amountCopied {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Nominal disalin";
+      case SupportedLanguage.english:
+        return "Amount copied";
+    }
+  }
+
+  static String get exactAmountNote {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Bayar dengan nominal PERSIS (termasuk angka unik di belakang) agar terdeteksi otomatis.";
+      case SupportedLanguage.english:
+        return "Pay the EXACT amount (including the unique cents) so it is detected automatically.";
+    }
+  }
+
   static String get iAlreadyPaidCheckNow {
     switch (_currentLanguage) {
       case SupportedLanguage.indonesian:
