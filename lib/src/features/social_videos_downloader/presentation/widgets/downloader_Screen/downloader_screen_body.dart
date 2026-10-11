@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:el_saver/src/container_injector.dart' show sl;
 import 'package:el_saver/src/core/media_query.dart';
 import 'package:el_saver/src/core/services/premium_service.dart';
-import 'package:el_saver/src/core/services/interstitial_ad_service.dart';
 import 'package:el_saver/src/core/widgets/premium_dialog.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/widgets/downloader_Screen/downloader_screen_supported_platforms.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/widgets/downloader_Screen/language_switcher.dart';
@@ -149,10 +148,6 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
               }
               if (state is DownloaderSaveVideoSuccess) {
                 buildToast(msg: state.message, type: ToastType.success);
-                // Full-screen ad at a natural break; premium never sees it.
-                if (!sl<PremiumService>().isPremium) {
-                  InterstitialAdService.instance.onDownloadSuccess();
-                }
               }
               if (state is DownloaderSaveVideoFailure) {
                 buildToast(msg: state.message, type: ToastType.error);

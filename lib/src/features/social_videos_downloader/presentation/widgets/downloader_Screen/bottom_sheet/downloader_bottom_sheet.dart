@@ -10,6 +10,7 @@ import '../../../../../../config/routes_manager.dart';
 import '../../../bloc/downloader_bloc/downloader_bloc.dart';
 import 'bottom_sheet_header.dart';
 import 'count_view.dart';
+import '../../../../../../core/services/interstitial_ad_service.dart';
 
 /// Opens a single bottom sheet that shows a shimmer skeleton while the fetch
 /// is in flight, then swaps to the quality picker when the video resolves.
@@ -127,6 +128,9 @@ class _QualityPickerState extends State<_QualityPicker> {
                 child: CustomElevatedBtn(
                   label: AppStrings.download,
                   onPressed: () {
+                    // User-initiated action: the only moment a full-screen ad
+                    // may appear (frequency-capped inside the service).
+                    InterstitialAdService.instance.onUserDownloadAction();
                     // Capture references before the sheet (and this context) is
                     // disposed by pop(), then close the sheet, dispatch the save
                     // event and navigate to the downloads screen.
@@ -159,6 +163,7 @@ class _QualityPickerState extends State<_QualityPicker> {
                     style: const TextStyle(color: Colors.white),
                   ),
                   onPressed: () {
+                    InterstitialAdService.instance.onUserDownloadAction();
                     final bloc = context.read<DownloaderBloc>();
                     final navigator = Navigator.of(context);
                     navigator.pop();

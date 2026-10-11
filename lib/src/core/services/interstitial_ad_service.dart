@@ -1,3 +1,5 @@
+import 'package:el_saver/src/container_injector.dart';
+import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,17 +62,21 @@ class InterstitialAdService {
     }
   }
 
-  /// Call on every download success. Shows the interstitial when the
-  /// frequency gates pass; always keeps the next ad preloaded.
-  Future<void> onDownloadSuccess() async {
+  /// Call on every user-initiated download/save action. Shows the
+  /// interstitial when the frequency gates pass; always keeps the next
+  /// ad preloaded.
+  Future<void> onUserDownloadAction() async {
+    try {
+      if (sl<PremiumService>().isPremium) return;
+    } catch (_) {}
     _successCount++;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_prefsKey, _successCount);
     } catch (_) {}
 
-    const everyN = 3;
-    const minInterval = Duration(minutes: 10);
+    const everyN = 2;
+    const minInterval = Duration(minutes: 2);
     final now = DateTime.now().millisecondsSinceEpoch;
     final lastOk = _lastShownMs == null ||
         now - _lastShownMs! >= minInterval.inMilliseconds;

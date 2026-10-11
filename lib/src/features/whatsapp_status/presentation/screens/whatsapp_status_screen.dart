@@ -12,6 +12,7 @@ import '../../data/whatsapp_status_repository.dart';
 import '../bloc/whatsapp_status_bloc.dart';
 import 'status_preview_screen.dart';
 import '../../../../core/common_widgets/fancy_loader.dart';
+import '../../../../core/services/interstitial_ad_service.dart';
 
 /// Grid of the currently visible WhatsApp statuses. Users must first *view*
 /// the statuses in WhatsApp so the files land in WA's status cache folder.
@@ -100,9 +101,13 @@ class _WhatsappStatusView extends StatelessWidget {
                   saving:
                       state is WhatsappStatusSaving && state.path == status.path,
                   onTap: () => _openPreview(context, status),
-                  onSave: () => context
-                      .read<WhatsappStatusBloc>()
-                      .add(WhatsappStatusSaveRequested(status.path)),
+                  onSave: () {
+                    // User-initiated save: eligible moment for a full-screen
+                    // ad (frequency-capped, premium-skipped in the service).
+                    InterstitialAdService.instance.onUserDownloadAction();
+                    context.read<WhatsappStatusBloc>().add(
+                        WhatsappStatusSaveRequested(status.path));
+                  },
                 );
               },
             ),
