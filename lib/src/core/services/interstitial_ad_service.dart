@@ -24,6 +24,10 @@ class InterstitialAdService {
   int _successCount = 0;
   int? _lastShownMs;
   InterstitialAd? _loaded;
+  // Retention-only: never read. Holds the on-screen ad strongly so GC
+  // can't collect the Dart-side object mid-display.
+  // ignore: unused_field
+  InterstitialAd? _showing;
   bool _loading = false;
   Timer? _preloadTimer;
 
@@ -123,6 +127,11 @@ class InterstitialAdService {
       await _preload();
       return;
     }
+    // Strong reference for the whole presentation: after show() returns,
+    // the local goes out of scope and GC could collect the Dart-side ad
+    // object mid-display — the ad then closed itself ("hilang sendiri")
+    // while the close button was already on screen.
+    _showing = ad;
     // The tap that triggered us also pops a sheet and pushes a route;
     // letting that transition settle first avoids the close-button
     // jank/freeze reported when the ad opened mid-navigation.
@@ -131,6 +140,7 @@ class InterstitialAdService {
     void finish(InterstitialAd ad) {
       if (finished) return; // callbacks can fire twice on some devices
       finished = true;
+      _showing = null;
       ad.dispose();
       _preload();
     }
