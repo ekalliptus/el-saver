@@ -17,6 +17,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import cookie_sync
 from cookie_sync import (
     AdminConfirmPayload,
+    CancelOrderPayload,
     OrderPayload,
     PaymentWebhookPayload,
     RedeemPayload,
@@ -279,6 +280,83 @@ class OrderFlowTests(unittest.TestCase):
             order["order_id"], cookie_sync.API_KEY)
         entries = dict(cookie_sync._tlv_parse(response["qris"]))
         self.assertEqual(entries["54"], order["gross_amount"])
+
+
+class CancelOrderTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        patcher = unittest.mock.patch.multiple(
+            cookie_sync, PREMIUM_FILE=base / "l.json",
+            ORDER_FILE=base / "orders.json",
+            STATIC_QRIS=_static_qris(), WEBHOOK_SECRET="test-whsec",
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+        self.addCleanup(cookie_sync._rate_hits.clear)
+
+    def _order(self, ip, device="f" * 16):
+        return cookie_sync.premium_order(
+            OrderPayload(device_id=device, package_id="monthly"),
+            _req(ip), cookie_sync.API_KEY)
+
+    def test_owner_can_cancel_and_license_released(self):
+        order = self._order("10.9.8.1")
+        lic = cookie_sync._read_orders()[order["order_id"]]["license"]
+        self.assertIn(lic, cookie_sync._read_licenses())
+        res = cookie_sync.premium_order_cancel(
+            CancelOrderPayload(device_id="f" * 16, order_id=order["order_id"]),
+            _req("10.9.8.2"), cookie_sync.API_KEY)
+        self.assertTrue(res["cancelled"])
+        self.assertNotIn(lic, cookie_sync._read_licenses())
+        self.assertEqual(
+            cookie_sync._read_orders()[order["order_id"]]["status"],
+            "cancelled")
+
+    def test_foreign_device_cannot_cancel(self):
+        order = self._order("10.9.8.3")
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            cookie_sync.premium_order_cancel(
+                CancelOrderPayload(device_id="a" * 16,
+                                   order_id=order["order_id"]),
+                _req("10.9.8.4"), cookie_sync.API_KEY)
+        self.assertEqual(error.exception.status_code, 403)
+
+    def test_cancel_is_idempotent_for_paid_orders(self):
+        order = self._order("10.9.8.5")
+        oid = order["order_id"]
+        # pay it via webhook, then cancel -> "already"
+        cookie_sync.premium_webhook(PaymentWebhookPayload(
+            order_id=oid, gross_amount=order["gross_amount"],
+            signature=_sign(oid, order["gross_amount"])), _req("10.9.8.6"))
+        res = cookie_sync.premium_order_cancel(
+            CancelOrderPayload(device_id="f" * 16, order_id=oid),
+            _req("10.9.8.7"), cookie_sync.API_KEY)
+        self.assertEqual(res.get("already"), "paid")
+
+    def test_stale_pending_swept_and_cap_freed(self):
+        for _ in range(cookie_sync.MAX_PENDING_ORDERS_PER_DEVICE):
+            self._order("10.9.8.8")
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            self._order("10.9.8.9")
+        self.assertEqual(error.exception.status_code, 429)
+        # Age every pending order beyond the stale window.
+        orders = cookie_sync._read_orders()
+        stale = (cookie_sync._now_utc() - timedelta(hours=25)).isoformat()
+        for o in orders.values():
+            if o.get("status") == "pending":
+                o["created_at"] = stale
+        cookie_sync._write_orders(orders)
+        # Next order attempt sweeps them and succeeds.
+        order = self._order("10.9.8.10")
+        self.assertTrue(order["order_id"])
+        rows = list(cookie_sync._read_orders().values())
+        pending_now = [o for o in rows if o["status"] == "pending"]
+        cancelled = [o for o in rows if o["status"] == "cancelled"]
+        self.assertEqual(len(pending_now), 1)  # only the fresh order
+        self.assertEqual(len(cancelled),
+                         cookie_sync.MAX_PENDING_ORDERS_PER_DEVICE)
 
 
 class WebhookTests(unittest.TestCase):

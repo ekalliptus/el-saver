@@ -164,6 +164,22 @@ class PremiumService {
     return list;
   }
 
+  /// Cancels a pending order: frees the device's pending-order slot and
+  /// releases the reserved license server-side.
+  Future<void> cancelOrder(String orderId) async {
+    final deviceId = _deviceId ?? await _resolveDeviceId();
+    if (deviceId == null) return;
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
+    await dio.post(
+      '$_orderUrl/cancel',
+      options: Options(headers: {'X-Api-Key': ApiConfig.backendApiKey}),
+      data: {'device_id': deviceId, 'order_id': orderId},
+    );
+  }
+
   /// Re-fetches one order as a resumable [OrderInfo] (QR regenerated
   /// server-side), for continuing a pending payment.
   Future<OrderInfo> resumeOrder(String orderId) async {

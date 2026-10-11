@@ -1371,6 +1371,33 @@ class AppStrings {
     }
   }
 
+  static String get statusCancelled {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Dibatalkan";
+      case SupportedLanguage.english:
+        return "Cancelled";
+    }
+  }
+
+  static String get cancelOrderConfirm {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Batalkan pesanan ini? Nomor pesanan tidak bisa digunakan lagi.";
+      case SupportedLanguage.english:
+        return "Cancel this order? The order number can no longer be used.";
+    }
+  }
+
+  static String get yes {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Ya";
+      case SupportedLanguage.english:
+        return "Yes";
+    }
+  }
+
   static String get resumePayment {
     switch (_currentLanguage) {
       case SupportedLanguage.indonesian:

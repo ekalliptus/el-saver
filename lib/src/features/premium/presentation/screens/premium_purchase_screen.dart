@@ -107,6 +107,25 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
     }
   }
 
+  bool _cancelling = false;
+
+  /// Real cancellation: frees the pending slot on the server so the
+  /// device is never blocked from buying again (the old button only
+  /// closed the screen and left the order pending forever).
+  Future<void> _cancelOrder() async {
+    if (_cancelling) return;
+    setState(() => _cancelling = true);
+    _pollTimer?.cancel();
+    final order = _order;
+    try {
+      if (order != null) await _premium.cancelOrder(order.orderId);
+    } catch (_) {
+      // Offline/unknown order: popping anyway is fine - stale pendings
+      // are auto-cancelled server-side after 24h.
+    }
+    if (mounted) Navigator.of(context).pop(false);
+  }
+
   void _startPolling() {
     _pollTimer?.cancel();
     var attempts = 0;
@@ -373,11 +392,10 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
           label: Text(AppStrings.iAlreadyPaidCheckNow),
         ),
         TextButton(
-          onPressed: () {
-            _pollTimer?.cancel();
-            Navigator.of(context).pop();
-          },
-          child: Text(AppStrings.cancelOrder),
+          onPressed: _cancelling ? null : _cancelOrder,
+          child: _cancelling
+              ? const FancyLoader(size: 12)
+              : Text(AppStrings.cancelOrder),
         ),
       ],
     );

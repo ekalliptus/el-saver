@@ -44,6 +44,36 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
     }
   }
 
+  Future<void> _cancel(OrderHistoryItem item) async {
+    if (_resumingId != null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text(AppStrings.cancelOrder),
+        content: Text(AppStrings.cancelOrderConfirm),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(d, false),
+              child: Text(AppStrings.cancel)),
+          FilledButton(
+            onPressed: () => Navigator.pop(d, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            child: Text(AppStrings.yes),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _resumingId = item.orderId);
+    try {
+      await _premium.cancelOrder(item.orderId);
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _resumingId = null);
+      _load();
+    }
+  }
+
   Future<void> _resume(OrderHistoryItem item) async {
     if (_resumingId != null) return;
     setState(() => _resumingId = item.orderId);
@@ -109,7 +139,13 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          for (final item in orders) _HistoryCard(item: item, onResume: () => _resume(item), resuming: _resumingId == item.orderId),
+          for (final item in orders)
+            _HistoryCard(
+              item: item,
+              onResume: () => _resume(item),
+              onCancel: () => _cancel(item),
+              resuming: _resumingId == item.orderId,
+            ),
         ],
       ),
     );
@@ -119,11 +155,13 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
 class _HistoryCard extends StatelessWidget {
   final OrderHistoryItem item;
   final VoidCallback onResume;
+  final VoidCallback onCancel;
   final bool resuming;
 
   const _HistoryCard({
     required this.item,
     required this.onResume,
+    required this.onCancel,
     required this.resuming,
   });
 
@@ -157,26 +195,7 @@ class _HistoryCard extends StatelessWidget {
                         fontWeight: FontWeight.w600, fontSize: 15),
                   ),
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: item.isPending
-                        ? Colors.orange.withValues(alpha: 0.15)
-                        : AppColors.green.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    item.isPending
-                        ? AppStrings.statusPending
-                        : AppStrings.statusPaid,
-                    style: TextStyle(
-                      color: item.isPending ? Colors.orange : AppColors.green,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+                _StatusChip(item: item),
               ],
             ),
             const SizedBox(height: 8),
@@ -191,18 +210,56 @@ class _HistoryCard extends StatelessWidget {
             ),
             if (item.isPending) ...[
               const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: resuming ? null : onResume,
-                  icon: resuming
-                      ? const FancyLoader(size: 12, color: Colors.white)
-                      : const Icon(Icons.qr_code_rounded, size: 18),
-                  label: Text(AppStrings.resumePayment),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: resuming ? null : onResume,
+                      icon: resuming
+                          ? const FancyLoader(size: 12, color: Colors.white)
+                          : const Icon(Icons.qr_code_rounded, size: 18),
+                      label: Text(AppStrings.resumePayment),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: onCancel,
+                    child: Text(AppStrings.cancelOrder,
+                        style: const TextStyle(fontSize: 12)),
+                  ),
+                ],
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  final OrderHistoryItem item;
+  const _StatusChip({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (item.status) {
+      'pending' => (AppStrings.statusPending, Colors.orange),
+      'paid' => (AppStrings.statusPaid, AppColors.green),
+      _ => (AppStrings.statusCancelled, Colors.grey),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

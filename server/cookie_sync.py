@@ -330,6 +330,31 @@ ORDER_FILE = Path(os.getenv("ORDER_FILE", str(COOKIE_PATH.parent / "premium-orde
 # cannot grow the stores without bound.
 MAX_PENDING_ORDERS_PER_DEVICE = 3
 
+# Orders abandoned this long are auto-cancelled (license released) the next
+# time the device creates an order, so a user can never get permanently
+# locked out by the pending cap.
+PENDING_ORDER_STALE_AFTER = timedelta(hours=24)
+
+
+def _cancel_order(orders: dict, licenses: dict, order_id: str, order: dict):
+    order["status"] = "cancelled"
+    order["cancelled_at"] = _now_utc().isoformat()
+    # Release the reserved license; it was never paid for.
+    licenses.pop(order.get("license"), None)
+
+
+def _sweep_stale_pending(orders: dict, licenses: dict):
+    now = _now_utc()
+    for oid, o in list(orders.items()):
+        if o.get("status") != "pending":
+            continue
+        try:
+            stale = now - _parse_ts(o["created_at"]) > PENDING_ORDER_STALE_AFTER
+        except (KeyError, ValueError, TypeError):
+            continue
+        if stale:
+            _cancel_order(orders, licenses, oid, o)
+
 
 def _read_licenses() -> dict:
     return _load_json_store(PREMIUM_FILE)
@@ -554,6 +579,9 @@ def premium_order(payload: OrderPayload, request: Request, x_api_key: str = Head
     with _json_lock:
         licenses = _read_licenses()
         orders = _read_orders()
+        # Self-heal abandoned pendings first so they stop counting toward
+        # the per-device cap.
+        _sweep_stale_pending(orders, licenses)
         pending = sum(
             1 for o in orders.values()
             if o.get("device_id") == device_id and o.get("status") == "pending"
@@ -666,6 +694,38 @@ def _activate_order_license(licenses: dict, order: dict) -> dict:
         entry["expires_at"] = None
     licenses[order["license"]] = entry
     return entry
+
+
+class CancelOrderPayload(BaseModel):
+    device_id: str
+    order_id: str
+
+
+@app.post("/premium/order/cancel")
+def premium_order_cancel(payload: CancelOrderPayload, request: Request,
+                         x_api_key: str = Header()):
+    """User-initiated cancellation of a pending order: frees the per-device
+    pending cap slot and releases the reserved (unpaid) license."""
+    _check_key(x_api_key)
+    _rate_limit(request, "premium-cancel", 20, 60)
+    device_id = payload.device_id.strip().lower()
+    if not _DEVICE_RE.match(device_id):
+        raise HTTPException(400, "device_id tidak valid")
+    with _json_lock:
+        orders = _read_orders()
+        order = orders.get(payload.order_id)
+        if order is None:
+            raise HTTPException(404, "Order tidak ditemukan")
+        # Ownership: a device may only cancel its own orders.
+        if order.get("device_id") != device_id:
+            raise HTTPException(403, "Order bukan milik perangkat ini")
+        if order.get("status") != "pending":
+            return {"status": "ok", "already": order.get("status")}
+        licenses = _read_licenses()
+        _cancel_order(orders, licenses, payload.order_id, order)
+        _write_licenses(licenses)
+        _write_orders(orders)
+    return {"status": "ok", "cancelled": True}
 
 
 class AdminConfirmPayload(BaseModel):

@@ -95,21 +95,31 @@ class InterstitialAdService {
       await _preload();
       return;
     }
+    // The tap that triggered us also pops a sheet and pushes a route;
+    // letting that transition settle first avoids the close-button
+    // jank/freeze reported when the ad opened mid-navigation.
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    var finished = false;
+    void finish(InterstitialAd ad) {
+      if (finished) return; // callbacks can fire twice on some devices
+      finished = true;
+      ad.dispose();
+      _preload();
+    }
+
     ad.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (ad) {
-        ad.dispose();
-        _preload();
-      },
-      onAdFailedToShowFullScreenContent: (ad, _) {
-        ad.dispose();
-        _preload();
-      },
+      onAdDismissedFullScreenContent: finish,
+      onAdFailedToShowFullScreenContent: (ad, _) => finish(ad),
     );
     _lastShownMs = nowMs;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_lastShownKey, nowMs);
     } catch (_) {}
-    await ad.show();
+    try {
+      await ad.show();
+    } catch (_) {
+      finish(ad); // e.g. activity paused mid-flow; never leak the ad
+    }
   }
 }
