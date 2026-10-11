@@ -9,6 +9,8 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'local_notification_service.dart';
+
 /// Compare two semver strings ("x.y.z"). Returns true if [remote] > [local].
 /// Robust to missing components ("1.6" == "1.6.0") and stray build suffixes.
 bool isNewerVersionName(String remote, String local) {
@@ -82,6 +84,8 @@ class UpdateService {
         'is_forced': false,
         // Production interstitial ad unit; empty -> Google test unit in-app.
         'interstitial_ad_unit_id': '',
+        // Show the interstitial every Nth user download action.
+        'interstitial_every_n': 2,
       });
       await config.fetchAndActivate();
       developer.log('Firebase Remote Config initialized',
@@ -147,6 +151,7 @@ class UpdateService {
           isForced: isForced,
         );
         _updateController.add(info);
+        await _notifyNewVersion(latestVersionName);
         developer.log('Update available: $latestVersionName',
             name: 'UpdateService');
         return info;
@@ -155,6 +160,19 @@ class UpdateService {
       developer.log('Update check failed: $e', name: 'UpdateService');
     }
     return null;
+  }
+
+  /// Post the "new version" tray notification once per [versionName] so the
+  /// 5-minute periodic check never spams the shade.
+  Future<void> _notifyNewVersion(String versionName) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString('update_notified_version') == versionName) return;
+      await prefs.setString('update_notified_version', versionName);
+      await LocalNotificationService.instance.showUpdateAvailable(versionName);
+    } catch (_) {
+      // Best-effort only.
+    }
   }
 
   /// Build the download URL for this device's ABI. Prefers [base] +

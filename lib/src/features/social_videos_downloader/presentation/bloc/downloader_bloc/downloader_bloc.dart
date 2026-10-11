@@ -8,6 +8,7 @@ import 'package:el_saver/src/features/social_videos_downloader/domain/entities/v
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../../core/helpers/video_thumbnail.dart';
+import '../../../../../core/services/local_notification_service.dart';
 
 import '../../../../../core/error/failure.dart';
 import '../../../../../core/helpers/dir_helper.dart';
@@ -169,6 +170,7 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
 
     _upsertItemByPath(item);
     await _saveDownloadHistory();
+    LocalNotificationService.instance.downloadProgress(path, videoTitle, 0);
     emit(const DownloaderSaveVideoLoading());
 
     // Create CancelToken for this download
@@ -177,6 +179,7 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
 
     // Progress callback - no broken checks, just throttle by time
     DateTime? lastProgressUpdate;
+    int lastNotifiedPercent = -1;
     void onProgressUpdate(int received, int total) {
       if (total > 0) {
         final now = DateTime.now();
@@ -199,6 +202,15 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
             progress: progress,
           ),
         );
+
+        // Tray notification only on whole-percent changes: posting per
+        // network chunk would spam NotificationManager.
+        final pct = progress.toInt();
+        if (pct != lastNotifiedPercent) {
+          lastNotifiedPercent = pct;
+          LocalNotificationService.instance
+              .downloadProgress(path, videoTitle, pct);
+        }
 
         if (progress % 10 < 1) {
           _saveDownloadHistory();
@@ -231,6 +243,8 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
           ),
         );
         _saveDownloadHistory();
+        LocalNotificationService.instance
+            .downloadFailed(path, videoTitle, failure.message);
         emit(DownloaderSaveVideoFailure(failure.message));
       },
       (right) async {
@@ -244,6 +258,7 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
           ),
         );
         _saveDownloadHistory();
+        LocalNotificationService.instance.downloadCompleted(path, videoTitle);
         emit(DownloaderSaveVideoSuccess(message: right, path: path));
 
         if (_isVideoPath(path)) {
@@ -445,6 +460,7 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
       _patchItemByPath(
           event.path, (d) => d.copyWith(status: DownloadStatus.paused));
       await _saveDownloadHistory();
+      LocalNotificationService.instance.cancelDownload(event.path);
       emit(DownloaderVideoPaused(path: event.path));
     }
   }
@@ -495,6 +511,7 @@ class DownloaderBloc extends Bloc<DownloaderEvent, DownloaderState> {
         if (item.status == DownloadStatus.downloading) {
           _cancelTokens[event.path]?.cancel("Deleted by user");
           _cancelTokens.remove(event.path);
+          LocalNotificationService.instance.cancelDownload(event.path);
         }
 
         newDownloads.removeAt(index);

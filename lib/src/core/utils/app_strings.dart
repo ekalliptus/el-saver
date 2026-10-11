@@ -1588,4 +1588,50 @@ class AppStrings {
         return "Can't open the installer";
     }
   }
+
+  // Local notifications
+  static String get notifDownloading {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Mengunduh";
+      case SupportedLanguage.english:
+        return "Downloading";
+    }
+  }
+
+  static String get notifDownloadComplete {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Unduhan selesai";
+      case SupportedLanguage.english:
+        return "Download complete";
+    }
+  }
+
+  static String get notifDownloadFailed {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Unduhan gagal";
+      case SupportedLanguage.english:
+        return "Download failed";
+    }
+  }
+
+  static String get notifUpdateAvailable {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Versi baru tersedia";
+      case SupportedLanguage.english:
+        return "New version available";
+    }
+  }
+
+  static String notifUpdateBody(String version) {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "EL-Saver v$version siap diperbarui. Ketuk untuk membuka.";
+      case SupportedLanguage.english:
+        return "EL-Saver v$version is ready to install. Tap to open.";
+    }
+  }
 }

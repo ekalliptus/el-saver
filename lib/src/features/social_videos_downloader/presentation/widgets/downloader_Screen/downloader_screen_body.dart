@@ -1,5 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -35,6 +37,19 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final TextEditingController videoLinkController = TextEditingController();
   BannerAd? _bannerAd;
+  Timer? _bannerRetryTimer;
+  int _bannerAttempts = 0;
+
+  /// Backoff between banner retries: AdMob's first requests often no-fill
+  /// (new unit / cold network), and without a retry the banner never showed
+  /// again for the whole session.
+  static const _bannerRetryDelays = [
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+    Duration(seconds: 60),
+    Duration(seconds: 120),
+    Duration(seconds: 300),
+  ];
 
   @override
   void initState() {
@@ -97,18 +112,34 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (_) {
+          _bannerAttempts = 0;
           if (mounted) setState(() {});
         },
         onAdFailedToLoad: (ad, error) {
           ad.dispose();
           _bannerAd = null;
+          _scheduleBannerRetry();
+          if (mounted) setState(() {});
         },
       ),
     )..load();
   }
 
+  void _scheduleBannerRetry() {
+    if (_bannerAttempts >= _bannerRetryDelays.length) return;
+    final delay = _bannerRetryDelays[_bannerAttempts++];
+    _bannerRetryTimer?.cancel();
+    _bannerRetryTimer = Timer(delay, () {
+      // Premium may have activated or the screen died while we waited.
+      if (mounted && _bannerAd == null && !sl<PremiumService>().isPremium) {
+        _loadBannerAd();
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _bannerRetryTimer?.cancel();
     _bannerAd?.dispose();
     super.dispose();
   }

@@ -10,6 +10,8 @@ import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/services/interstitial_ad_service.dart';
 import 'package:el_saver/src/core/services/language_service.dart';
 import 'package:el_saver/src/core/services/push_notification_service.dart';
+import 'package:el_saver/src/core/services/local_notification_service.dart';
+import 'dart:async';
 import 'dart:developer' as developer;
 
 void main() async {
@@ -36,9 +38,13 @@ void main() async {
   await LanguageService.instance.initialize();
   await LanguageService.instance.autoDetectLanguage();
   await sl<PremiumService>().initialize();
-  await PushNotificationService.instance.initialize();
-  // Preload the first interstitial so it can show immediately when due.
-  await InterstitialAdService.instance.initialize();
 
+  // First paint first: FCM getToken/requestPermission can hang for a long
+  // time (flaky Play Services) — awaiting it here kept the app on the
+  // splash screen and skipped ad preload + notification init entirely.
   runApp(const MyApp());
+  unawaited(PushNotificationService.instance.initialize());
+  unawaited(LocalNotificationService.instance.initialize());
+  // Preload the first interstitial so it can show immediately when due.
+  unawaited(InterstitialAdService.instance.initialize());
 }
