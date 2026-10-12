@@ -620,5 +620,242 @@ class LegacyDeviceMigrationTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 409)
 
 
+class AdminDashboardEndpointTests(unittest.TestCase):
+    """LAMPIRAN B endpoints: licenses, full order list, activity log."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        patcher = unittest.mock.patch.multiple(
+            cookie_sync,
+            PREMIUM_FILE=base / "lic.json",
+            ORDER_FILE=base / "orders.json",
+            ADMIN_LOG_FILE=base / "admin-log.json",
+            STATIC_QRIS=_static_qris(),
+            WEBHOOK_SECRET="test-whsec",
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+        self.addCleanup(cookie_sync._rate_hits.clear)
+
+    def _order(self, ip, device="a" * 16, package="monthly"):
+        return cookie_sync.premium_order(
+            OrderPayload(device_id=device, package_id=package),
+            _req(ip), cookie_sync.API_KEY,
+        )
+
+    def _admin(self, call, payload, ip="10.9.9.1"):
+        return call(payload, _req(ip))
+
+    def test_license_create_requires_admin_key(self):
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            self._admin(cookie_sync.premium_admin_license_create,
+                        cookie_sync.AdminLicenseCreatePayload(admin_key="nope"))
+        self.assertEqual(error.exception.status_code, 403)
+
+    def test_license_create_validates_days(self):
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            self._admin(cookie_sync.premium_admin_license_create,
+                        cookie_sync.AdminLicenseCreatePayload(
+                            admin_key="test-admin-key", days=7))
+        self.assertEqual(error.exception.status_code, 400)
+
+    def test_license_create_returns_unbound_key_with_note(self):
+        response = self._admin(cookie_sync.premium_admin_license_create,
+                               cookie_sync.AdminLicenseCreatePayload(
+                                   admin_key="test-admin-key", days=30,
+                                   note="giveaway"))
+        self.assertRegex(response["key"], cookie_sync.LICENSE_RE)
+        entry = cookie_sync._read_licenses()[response["key"]]
+        self.assertIsNone(entry["device_id"])
+        self.assertEqual(entry["days"], 30)
+        self.assertEqual(entry["note"], "giveaway")
+
+    def test_license_list_filters_by_status(self):
+        created = [
+            self._admin(cookie_sync.premium_admin_license_create,
+                        cookie_sync.AdminLicenseCreatePayload(
+                            admin_key="test-admin-key"))
+            for _ in range(2)
+        ]
+        cookie_sync.premium_redeem(
+            RedeemPayload(key=created[0]["key"], device_id="a" * 16),
+            _req("10.9.9.2"), cookie_sync.API_KEY,
+        )
+        # An expired bound license written by hand.
+        licenses = cookie_sync._read_licenses()
+        licenses["ELS-OLD0-0000-0000"] = {
+            "device_id": "b" * 16, "redeemed_at": "2024-01-01T00:00:00+00:00",
+            "expires_at": "2024-01-02T00:00:00+00:00",
+        }
+        cookie_sync._write_licenses(licenses)
+
+        def listing(status="all"):
+            return self._admin(cookie_sync.premium_admin_licenses,
+                               cookie_sync.AdminLicensesPayload(
+                                   admin_key="test-admin-key", status=status)
+                               )["licenses"]
+
+        self.assertEqual(len(listing()), 3)
+        self.assertEqual(len(listing("unbound")), 1)
+        self.assertEqual({r["status"] for r in listing("bound")}, {"active", "expired"})
+        self.assertEqual(len(listing("active")), 1)
+        self.assertEqual(len(listing("expired")), 1)
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            listing("bogus")
+        self.assertEqual(error.exception.status_code, 400)
+
+    def test_license_revoke_unbinds_and_allows_redeem_elsewhere(self):
+        created = self._admin(cookie_sync.premium_admin_license_create,
+                              cookie_sync.AdminLicenseCreatePayload(
+                                  admin_key="test-admin-key", days=365))
+        key = created["key"]
+        cookie_sync.premium_redeem(
+            RedeemPayload(key=key, device_id="a" * 16),
+            _req("10.9.9.3"), cookie_sync.API_KEY,
+        )
+        response = self._admin(cookie_sync.premium_admin_license_revoke,
+                               cookie_sync.AdminLicenseKeyPayload(
+                                   admin_key="test-admin-key", key=key.lower()))
+        self.assertTrue(response["unbound"])
+        entry = cookie_sync._read_licenses()[key]
+        self.assertIsNone(entry["device_id"])
+        self.assertIsNone(entry["expires_at"])
+        # A different device can now redeem the same key.
+        result = cookie_sync.premium_redeem(
+            RedeemPayload(key=key, device_id="b" * 16),
+            _req("10.9.9.4"), cookie_sync.API_KEY,
+        )
+        self.assertTrue(result["premium"])
+        self.assertIsNotNone(cookie_sync._read_licenses()[key]["expires_at"])
+
+    def test_license_revoke_and_delete_reject_unknown_key(self):
+        for call in (cookie_sync.premium_admin_license_revoke,
+                     cookie_sync.premium_admin_license_delete):
+            with self.subTest(call=call.__name__), \
+                 self.assertRaises(cookie_sync.HTTPException) as error:
+                self._admin(call, cookie_sync.AdminLicenseKeyPayload(
+                    admin_key="test-admin-key", key="ELS-ZZZZ-ZZZZ-ZZZZ"))
+            self.assertEqual(error.exception.status_code, 404)
+
+    def test_license_delete_removes_key(self):
+        created = self._admin(cookie_sync.premium_admin_license_create,
+                              cookie_sync.AdminLicenseCreatePayload(
+                                  admin_key="test-admin-key"))
+        self._admin(cookie_sync.premium_admin_license_delete,
+                    cookie_sync.AdminLicenseKeyPayload(
+                        admin_key="test-admin-key", key=created["key"]))
+        self.assertNotIn(created["key"], cookie_sync._read_licenses())
+
+    def test_orders_all_lists_every_status_with_summary(self):
+        paid = self._order("10.9.9.5", device="a" * 16)
+        self._order("10.9.9.6", device="b" * 16)   # stays pending
+        cancelled = self._order("10.9.9.7", device="c" * 16)
+        cookie_sync.premium_webhook(
+            PaymentWebhookPayload(
+                order_id=paid["order_id"], gross_amount=paid["gross_amount"],
+                signature=_sign(paid["order_id"], paid["gross_amount"]),
+            ), _req("10.9.9.8"),
+        )
+        cookie_sync.premium_order_cancel(
+            CancelOrderPayload(device_id="c" * 16, order_id=cancelled["order_id"]),
+            _req("10.9.9.9"), cookie_sync.API_KEY,
+        )
+
+        response = self._admin(cookie_sync.premium_admin_orders_all,
+                               cookie_sync.AdminOrdersAllPayload(
+                                   admin_key="test-admin-key"))
+        statuses = {r["status"] for r in response["orders"]}
+        self.assertEqual(statuses, {"pending", "paid", "cancelled"})
+        self.assertTrue(all(r["device_id"] for r in response["orders"]))
+        self.assertTrue(all(r["gross_amount"] for r in response["orders"]))
+        summary = response["summary"]
+        self.assertEqual(summary["total"], 3)
+        self.assertEqual(summary["paid"], 1)
+        self.assertEqual(summary["pending"], 1)
+        self.assertEqual(summary["cancelled"], 1)
+        self.assertEqual(summary["paid_today"], 1)
+        self.assertEqual(summary["revenue_7d"], int(paid["gross_amount"]))
+        self.assertEqual(summary["revenue_30d"], int(paid["gross_amount"]))
+        # Newest first.
+        self.assertEqual(response["orders"][0]["order_id"], cancelled["order_id"])
+
+    def test_orders_all_filters_status_and_limit(self):
+        for i in range(3):
+            self._order(f"10.9.9.1{i}", device="a" * 16)
+        base = {"admin_key": "test-admin-key"}
+        pending_only = self._admin(
+            cookie_sync.premium_admin_orders_all,
+            cookie_sync.AdminOrdersAllPayload(**base, status="pending"))
+        self.assertEqual(len(pending_only["orders"]), 3)
+        limited = self._admin(
+            cookie_sync.premium_admin_orders_all,
+            cookie_sync.AdminOrdersAllPayload(**base, limit=2))
+        self.assertEqual(len(limited["orders"]), 2)
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            self._admin(cookie_sync.premium_admin_orders_all,
+                        cookie_sync.AdminOrdersAllPayload(**base, status="bogus"))
+        self.assertEqual(error.exception.status_code, 400)
+
+    def test_manual_key_expiry_set_at_redemption(self):
+        created = self._admin(cookie_sync.premium_admin_license_create,
+                              cookie_sync.AdminLicenseCreatePayload(
+                                  admin_key="test-admin-key", days=30))
+        cookie_sync.premium_redeem(
+            RedeemPayload(key=created["key"], device_id="a" * 16),
+            _req("10.9.9.20"), cookie_sync.API_KEY,
+        )
+        entry = cookie_sync._read_licenses()[created["key"]]
+        expected = cookie_sync._now_utc() + timedelta(days=30)
+        parsed = cookie_sync._parse_ts(entry["expires_at"])
+        self.assertLess(abs((parsed - expected).total_seconds()), 60)
+        verified = cookie_sync.premium_verify(
+            cookie_sync.VerifyPayload(device_id="a" * 16), cookie_sync.API_KEY)
+        self.assertTrue(verified["premium"])
+
+    def test_manual_lifetime_key_never_expires(self):
+        created = self._admin(cookie_sync.premium_admin_license_create,
+                              cookie_sync.AdminLicenseCreatePayload(
+                                  admin_key="test-admin-key", days=None))
+        cookie_sync.premium_redeem(
+            RedeemPayload(key=created["key"], device_id="a" * 16),
+            _req("10.9.9.21"), cookie_sync.API_KEY,
+        )
+        entry = cookie_sync._read_licenses()[created["key"]]
+        self.assertIsNone(entry.get("expires_at"))
+
+    def test_admin_log_append_and_list_roundtrip(self):
+        self._admin(cookie_sync.premium_admin_log,
+                    cookie_sync.AdminLogPayload(
+                        admin_key="test-admin-key", action="confirm",
+                        detail="order abc123"))
+        self._admin(cookie_sync.premium_admin_log,
+                    cookie_sync.AdminLogPayload(
+                        admin_key="test-admin-key", action="create-key"))
+        entries = self._admin(cookie_sync.premium_admin_log_list,
+                              cookie_sync.AdminLogListPayload(
+                                  admin_key="test-admin-key"))["entries"]
+        self.assertEqual([e["action"] for e in entries], ["create-key", "confirm"])
+        self.assertEqual(entries[1]["detail"], "order abc123")
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            self._admin(cookie_sync.premium_admin_log,
+                        cookie_sync.AdminLogPayload(
+                            admin_key="test-admin-key", action="  "))
+        self.assertEqual(error.exception.status_code, 400)
+
+    def test_admin_log_is_capped(self):
+        with patch.object(cookie_sync, "ADMIN_LOG_MAX_ENTRIES", 3):
+            for i in range(5):
+                self._admin(cookie_sync.premium_admin_log,
+                            cookie_sync.AdminLogPayload(
+                                admin_key="test-admin-key", action=f"act-{i}"))
+        entries = self._admin(cookie_sync.premium_admin_log_list,
+                              cookie_sync.AdminLogListPayload(
+                                  admin_key="test-admin-key", limit=10))["entries"]
+        self.assertEqual([e["action"] for e in entries],
+                         ["act-4", "act-3", "act-2"])
+
+
 if __name__ == "__main__":
     unittest.main()

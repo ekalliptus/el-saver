@@ -398,22 +398,34 @@ def premium_redeem(payload: RedeemPayload, request: Request, x_api_key: str = He
         entry["device_id"] = device_id
         if not entry.get("redeemed_at"):
             entry["redeemed_at"] = _now_utc().isoformat()
+        # Manually issued keys carry their duration on the entry; expiry runs
+        # from redemption so an unbound key never ages while on the shelf.
+        if entry.get("days") and not entry.get("expires_at"):
+            entry["expires_at"] = (
+                _now_utc().replace(microsecond=0)
+                + timedelta(days=int(entry["days"]))
+            ).isoformat()
         licenses[key] = entry
         _write_licenses(licenses)
     return {"status": "ok", "premium": True}
 
 
-def _license_active(entry: dict) -> bool:
-    """A license is active when bound to a device and not past expiry."""
+def _license_status(entry: dict) -> str:
+    """unbound | active | expired (an invalid expiry counts as expired)."""
     if not entry.get("device_id"):
-        return False
+        return "unbound"
     expires_at = entry.get("expires_at")
     if not expires_at:
-        return True
+        return "active"
     try:
-        return _parse_ts(expires_at) > _now_utc()
+        return "active" if _parse_ts(expires_at) > _now_utc() else "expired"
     except ValueError:
-        return False
+        return "expired"
+
+
+def _license_active(entry: dict) -> bool:
+    """A license is active when bound to a device and not past expiry."""
+    return _license_status(entry) == "active"
 
 
 class VerifyPayload(BaseModel):
@@ -770,6 +782,238 @@ def premium_admin_orders(payload: AdminListPayload, request: Request):
         for oid, o in orders.items() if o["status"] == "pending"
     ]
     return {"pending": pending}
+
+
+# --- Admin dashboard: licenses, full order list, activity log ---------------
+# Used by the elsaver-web admin console. Reads get their own, higher rate-limit
+# scope because one dashboard page load fires several list calls.
+
+ADMIN_LOG_FILE = Path(os.getenv("ADMIN_LOG_FILE", str(COOKIE_PATH.parent / "admin-log.json")))
+ADMIN_LOG_MAX_ENTRIES = 1000
+
+_LICENSE_LIST_FILTERS = {"all", "bound", "unbound", "active", "expired"}
+
+
+class AdminLicensesPayload(BaseModel):
+    admin_key: str
+    status: str = "all"
+
+
+class AdminLicenseCreatePayload(BaseModel):
+    admin_key: str
+    days: int | None = None
+    note: str | None = None
+
+
+class AdminLicenseKeyPayload(BaseModel):
+    admin_key: str
+    key: str
+
+
+def _amount_int(value) -> int:
+    """Gross amounts are stored as strings; parse defensively to whole rupiah."""
+    try:
+        return int(Decimal(str(value)))
+    except (InvalidOperation, ValueError, TypeError):
+        return 0
+
+
+@app.post("/premium/admin/licenses")
+def premium_admin_licenses(payload: AdminLicensesPayload, request: Request):
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin-read", 120, 60)
+    wanted = (payload.status or "all").strip().lower()
+    if wanted not in _LICENSE_LIST_FILTERS:
+        raise HTTPException(400, "Status filter tidak dikenal")
+    licenses = _read_licenses()
+    rows = []
+    for key, entry in licenses.items():
+        status = _license_status(entry)
+        if wanted == "unbound" and status != "unbound":
+            continue
+        if wanted == "bound" and status == "unbound":
+            continue
+        if wanted in {"active", "expired"} and status != wanted:
+            continue
+        rows.append({
+            "key": key,
+            "status": status,
+            "device_id": entry.get("device_id"),
+            "redeemed_at": entry.get("redeemed_at"),
+            "expires_at": entry.get("expires_at"),
+            "days": entry.get("days"),
+            "note": entry.get("note"),
+        })
+    rows.sort(key=lambda r: r["redeemed_at"] or "", reverse=True)
+    return {"licenses": rows, "total": len(licenses)}
+
+
+@app.post("/premium/admin/license/create")
+def premium_admin_license_create(payload: AdminLicenseCreatePayload, request: Request):
+    """Issue a manual key (giveaway/support); bound later via /premium/redeem."""
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin", 30, 60)
+    if payload.days not in (None, 30, 365):
+        raise HTTPException(400, "days harus 30, 365, atau null (lifetime)")
+    note = (payload.note or "").strip() or None
+    if note and len(note) > 200:
+        raise HTTPException(400, "note terlalu panjang (maks 200 karakter)")
+    with _json_lock:
+        licenses = _read_licenses()
+        key = _generate_license(licenses)
+        entry = {"device_id": None, "redeemed_at": None}
+        if payload.days:
+            entry["days"] = payload.days
+        if note:
+            entry["note"] = note
+        licenses[key] = entry
+        _write_licenses(licenses)
+    return {"key": key, "days": payload.days, "note": note}
+
+
+@app.post("/premium/admin/license/revoke")
+def premium_admin_license_revoke(payload: AdminLicenseKeyPayload, request: Request):
+    """Unbind a license so it can be redeemed on another device."""
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin", 30, 60)
+    key = payload.key.strip().upper()
+    if not LICENSE_RE.match(key):
+        raise HTTPException(400, "Format kunci tidak valid")
+    with _json_lock:
+        licenses = _read_licenses()
+        entry = licenses.get(key)
+        if entry is None:
+            raise HTTPException(404, "Lisensi tidak ditemukan")
+        # Expiry is cleared too: a revoked-then-redeemed key must get a fresh
+        # window instead of inheriting the previous binding's deadline.
+        entry["device_id"] = None
+        entry["redeemed_at"] = None
+        entry["expires_at"] = None
+        licenses[key] = entry
+        _write_licenses(licenses)
+    return {"status": "ok", "key": key, "unbound": True}
+
+
+@app.post("/premium/admin/license/delete")
+def premium_admin_license_delete(payload: AdminLicenseKeyPayload, request: Request):
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin", 30, 60)
+    key = payload.key.strip().upper()
+    with _json_lock:
+        licenses = _read_licenses()
+        if key not in licenses:
+            raise HTTPException(404, "Lisensi tidak ditemukan")
+        del licenses[key]
+        _write_licenses(licenses)
+    return {"status": "ok", "key": key, "deleted": True}
+
+
+class AdminOrdersAllPayload(BaseModel):
+    admin_key: str
+    status: str | None = None
+    limit: int = 200
+
+
+@app.post("/premium/admin/orders/all")
+def premium_admin_orders_all(payload: AdminOrdersAllPayload, request: Request):
+    """Every order (not just pending) plus a revenue summary for the dashboard."""
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin-read", 120, 60)
+    if payload.status not in (None, "pending", "paid", "cancelled"):
+        raise HTTPException(400, "Status filter tidak dikenal")
+    limit = min(max(payload.limit, 1), 500)
+    orders = _read_orders()
+    now = _now_utc()
+    summary = {
+        "total": 0, "pending": 0, "paid": 0, "cancelled": 0,
+        "paid_today": 0, "revenue_today": 0,
+        "paid_7d": 0, "revenue_7d": 0,
+        "paid_30d": 0, "revenue_30d": 0,
+    }
+    rows = []
+    for oid, o in orders.items():
+        status = o.get("status")
+        if status in summary:
+            summary[status] += 1
+        summary["total"] += 1
+        if status == "paid":
+            amount = _amount_int(o.get("gross_amount"))
+            try:
+                paid_at = _parse_ts(o["paid_at"]) if o.get("paid_at") else None
+            except ValueError:
+                paid_at = None
+            if paid_at:
+                if paid_at.date() == now.date():
+                    summary["paid_today"] += 1
+                    summary["revenue_today"] += amount
+                if now - paid_at < timedelta(days=7):
+                    summary["paid_7d"] += 1
+                    summary["revenue_7d"] += amount
+                if now - paid_at < timedelta(days=30):
+                    summary["paid_30d"] += 1
+                    summary["revenue_30d"] += amount
+        if payload.status and status != payload.status:
+            continue
+        rows.append({
+            "order_id": oid,
+            "package_id": o.get("package_id"),
+            "package_name": PREMIUM_PACKAGES.get(o.get("package_id"), {}).get("name"),
+            "price": o.get("price"),
+            "gross_amount": o.get("gross_amount"),
+            "device_id": o.get("device_id"),
+            "status": status,
+            "created_at": o.get("created_at"),
+            "paid_at": o.get("paid_at"),
+        })
+    rows.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    return {"orders": rows[:limit], "summary": summary}
+
+
+class AdminLogPayload(BaseModel):
+    admin_key: str
+    action: str
+    detail: str | None = None
+
+
+@app.post("/premium/admin/log")
+def premium_admin_log(payload: AdminLogPayload, request: Request):
+    """Append an admin action to the on-VPS activity log (JSON, size-capped)."""
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin", 60, 60)
+    action = payload.action.strip()
+    if not action or len(action) > 64:
+        raise HTTPException(400, "action tidak valid (1-64 karakter)")
+    detail = (payload.detail or "").strip() or None
+    if detail and len(detail) > 280:
+        raise HTTPException(400, "detail terlalu panjang (maks 280 karakter)")
+    with _json_lock:
+        entries = _load_json_store(ADMIN_LOG_FILE)
+        if not isinstance(entries, list):
+            entries = []
+        entries.append({
+            "ts": _now_utc().isoformat(),
+            "action": action,
+            "detail": detail,
+        })
+        entries = entries[-ADMIN_LOG_MAX_ENTRIES:]
+        _atomic_write_json(ADMIN_LOG_FILE, entries)
+    return {"status": "ok"}
+
+
+class AdminLogListPayload(BaseModel):
+    admin_key: str
+    limit: int = 50
+
+
+@app.post("/premium/admin/log/list")
+def premium_admin_log_list(payload: AdminLogListPayload, request: Request):
+    _check_admin_key(payload.admin_key)
+    _rate_limit(request, "premium-admin-read", 120, 60)
+    limit = min(max(payload.limit, 1), 200)
+    entries = _load_json_store(ADMIN_LOG_FILE)
+    if not isinstance(entries, list):
+        entries = []
+    return {"entries": entries[-limit:][::-1]}
 
 
 class PaymentWebhookPayload(BaseModel):
