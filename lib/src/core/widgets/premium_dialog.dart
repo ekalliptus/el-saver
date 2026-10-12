@@ -115,6 +115,14 @@ class _PremiumDialogState extends State<_PremiumDialog> {
                 label: const Text('Beli Premium'),
               ),
             ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.of(context).pushNamed(Routes.premiumHistory);
+              },
+              child: const Text('Lihat Riwayat Pembelian'),
+            ),
             const SizedBox(height: 12),
             const Text('Punya kode lisensi? Masukkan di sini:'),
             const SizedBox(height: 6),

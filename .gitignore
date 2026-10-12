@@ -263,3 +263,9 @@ lib/config/*.json
 # Mimosa scanner state
 .mimosa/
 android/build/
+
+# pay-relay build outputs (secret passed at build time, never committed)
+pay-relay/.gradle/
+pay-relay/build/
+pay-relay/app/build/
+pay-relay/local.properties

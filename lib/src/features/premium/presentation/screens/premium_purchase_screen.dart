@@ -37,6 +37,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
   List<PremiumPackage>? _packages;
   String? _loadError;
   OrderInfo? _order;
+  OrderHistoryItem? _pendingOrder;
   bool _creating = false;
   bool _settled = false;
   Timer? _pollTimer;
@@ -59,6 +60,15 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
   }
 
   Future<void> _loadPackages() async {
+    // Surface an unpaid order first: buyers with a pending order should
+    // resume it, not stack new ones (and hit the pending cap).
+    try {
+      final history = await _premium.fetchOrderHistory();
+      if (mounted && _order == null) {
+        setState(() => _pendingOrder =
+            history.where((o) => o.isPending).firstOrNull);
+      }
+    } catch (_) {}
     try {
       final packages = await _premium.fetchPackages();
       if (!mounted) return;
@@ -234,6 +244,42 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (_pendingOrder != null) ...[
+          Card(
+            color: Colors.orange.withValues(alpha: 0.12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule, color: Colors.orange),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      AppStrings.unpaidOrderBanner,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        final resumed =
+                            await _premium.resumeOrder(_pendingOrder!.orderId);
+                        if (!mounted) return;
+                        setState(() {
+                          _order = resumed;
+                          _pendingOrder = null;
+                        });
+                        _startPolling();
+                      } catch (_) {}
+                    },
+                    child: Text(AppStrings.resumePayment),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         Card(
           color: AppColors.primaryColor.withValues(alpha: 0.08),
           child: Padding(

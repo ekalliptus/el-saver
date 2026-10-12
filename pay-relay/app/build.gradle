@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.ekalliptus.payrelay'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.ekalliptus.payrelay"
+        minSdk 23
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+        // Passed at build time: gradlew assembleRelease -PwebhookSecret=...
+        buildConfigField "String", "WEBHOOK_URL",
+                "\"https://api.ekalliptus.com/cookie-sync/premium/webhook\""
+        buildConfigField "String", "WEBHOOK_SECRET",
+                "\"${project.findProperty('webhookSecret') ?: ''}\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // Debug-signed so the APK is directly installable for personal use.
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    buildFeatures { buildConfig true }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+}

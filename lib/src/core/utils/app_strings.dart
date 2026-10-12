@@ -1371,6 +1371,15 @@ class AppStrings {
     }
   }
 
+  static String get unpaidOrderBanner {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Kamu punya pesanan yang belum dibayar.";
+      case SupportedLanguage.english:
+        return "You have an unpaid order.";
+    }
+  }
+
   static String get statusCancelled {
     switch (_currentLanguage) {
       case SupportedLanguage.indonesian:
