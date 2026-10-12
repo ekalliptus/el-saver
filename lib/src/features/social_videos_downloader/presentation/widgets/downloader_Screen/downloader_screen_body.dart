@@ -105,7 +105,7 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
     // risks AdMob invalid-traffic flags.
     final adUnitId = kDebugMode
         ? 'ca-app-pub-3940256099942544/6300978111'
-        : 'ca-app-pub-9374589831001594/1262943956';
+        : 'ca-app-pub-9374589831001594/4903129775';
     _bannerAd = BannerAd(
       adUnitId: adUnitId,
       size: AdSize.banner,
