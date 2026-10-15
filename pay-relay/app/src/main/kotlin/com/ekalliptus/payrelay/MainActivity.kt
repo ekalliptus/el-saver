@@ -37,6 +37,23 @@ class MainActivity : Activity() {
                 }.start()
             }
         })
+        root.addView(Button(this).apply {
+            text = "3. Kecualikan dari Optimasi Baterai"
+            setOnClickListener {
+                // ROM battery savers are the #1 killer of the listener at
+                // night; the exemption keeps money-in notifications flowing.
+                try {
+                    @Suppress("BatteryLife")
+                    val intent = Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        android.net.Uri.parse("package:$packageName"))
+                    startActivity(intent)
+                } catch (_: Exception) {
+                    startActivity(Intent(
+                        android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                }
+            }
+        })
         root.addView(status)
 
         setContentView(ScrollView(this).apply { addView(root) })
