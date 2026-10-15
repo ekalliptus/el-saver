@@ -857,5 +857,44 @@ class AdminDashboardEndpointTests(unittest.TestCase):
                          ["act-4", "act-3", "act-2"])
 
 
+class AdminAuthHardeningTests(unittest.TestCase):
+    """Every admin endpoint must reject a wrong admin key with 403."""
+
+    def _admin_call(self, fn, *args, **kwargs):
+        with self.assertRaises(cookie_sync.HTTPException) as error:
+            fn(*args, **kwargs)
+        self.assertEqual(error.exception.status_code, 403)
+
+    def test_all_admin_endpoints_reject_wrong_key(self):
+        bad = "wrong-admin-key"
+        self._admin_call(
+            cookie_sync.premium_admin_licenses,
+            cookie_sync.AdminLicensesPayload(admin_key=bad), _req("10.1.0.1"))
+        self._admin_call(
+            cookie_sync.premium_admin_license_create,
+            cookie_sync.AdminLicenseCreatePayload(admin_key=bad, days=30),
+            _req("10.1.0.2"))
+        self._admin_call(
+            cookie_sync.premium_admin_license_revoke,
+            cookie_sync.AdminLicenseKeyPayload(admin_key=bad,
+                                               key="ELS-AAAA-BBBB-CCCC"),
+            _req("10.1.0.3"))
+        self._admin_call(
+            cookie_sync.premium_admin_license_delete,
+            cookie_sync.AdminLicenseKeyPayload(admin_key=bad,
+                                               key="ELS-AAAA-BBBB-CCCC"),
+            _req("10.1.0.4"))
+        self._admin_call(
+            cookie_sync.premium_admin_orders_all,
+            cookie_sync.AdminOrdersAllPayload(admin_key=bad), _req("10.1.0.5"))
+        self._admin_call(
+            cookie_sync.premium_admin_log,
+            cookie_sync.AdminLogPayload(admin_key=bad, action="x", detail="y"),
+            _req("10.1.0.6"))
+        self._admin_call(
+            cookie_sync.premium_admin_log_list,
+            cookie_sync.AdminLogListPayload(admin_key=bad), _req("10.1.0.7"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,11 +1,11 @@
 
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../utils/app_strings.dart';
+import 'package:flutter/widgets.dart';
 
 /// System-tray notifications for in-app events (download progress/complete,
 /// update available). Independent of FCM — works fully offline.
@@ -16,6 +16,13 @@ class LocalNotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+
+  /// Tray notifications are for when the user is NOT looking at the app.
+  /// In the foreground the UI already shows a toast/dialog for the same
+  /// event — posting both is double-reporting.
+  bool get _userCanSeeApp =>
+      WidgetsBinding.instance.lifecycleState == null ||
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -78,6 +85,9 @@ class LocalNotificationService {
         onlyAlertOnce: true,
         silent: true,
         ongoing: true,
+        // If the process dies mid-download this clears the "stuck at x%"
+        // notification instead of leaving it pinned forever.
+        timeoutAfter: const Duration(minutes: 30).inMilliseconds,
         channelShowBadge: false,
       ),
     );
@@ -85,13 +95,17 @@ class LocalNotificationService {
 
   /// Replaces the progress entry with a self-dismissing completion notice.
   Future<void> downloadCompleted(String key, String title) async {
+    if (!_userCanSeeApp) return;
     await _show(
       key,
       AppStrings.notifDownloadComplete,
       title,
       AndroidNotificationDetails(
-        'downloads',
-        AppStrings.notifDownloading,
+        // Separate channel: importance is pinned at channel creation on
+        // Android, so reusing the silent progress channel ('downloads')
+        // kept completion notices mute forever.
+        'downloads_done',
+        AppStrings.notifDownloadComplete,
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
         autoCancel: true,
@@ -101,13 +115,14 @@ class LocalNotificationService {
   }
 
   Future<void> downloadFailed(String key, String title, String reason) async {
+    if (!_userCanSeeApp) return;
     await _show(
       key,
       AppStrings.notifDownloadFailed,
       title.isNotEmpty ? title : reason,
       AndroidNotificationDetails(
-        'downloads',
-        AppStrings.notifDownloading,
+        'downloads_done',
+        AppStrings.notifDownloadFailed,
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
         autoCancel: true,

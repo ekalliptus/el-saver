@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'local_notification_service.dart';
+import 'package:flutter/widgets.dart';
 
 /// Compare two semver strings ("x.y.z"). Returns true if [remote] > [local].
 /// Robust to missing components ("1.6" == "1.6.0") and stray build suffixes.
@@ -82,8 +83,11 @@ class UpdateService {
         'download_url': '',
         'changelog': '',
         'is_forced': false,
-        // Production interstitial ad unit; empty -> Google test unit in-app.
-        'interstitial_ad_unit_id': '',
+        // Production interstitial ad unit. Defaulting to the REAL unit means
+        // ads work on a fresh install even before the first RC fetch
+        // (empty default previously -> no unit -> no preload until the
+        // 5s-delayed fetch landed, and for 5+ min if that fetch failed).
+        'interstitial_ad_unit_id': 'ca-app-pub-9374589831001594/5953146708',
         // Show the interstitial every Nth user download action.
         'interstitial_every_n': 2,
       });
@@ -165,6 +169,11 @@ class UpdateService {
   /// Post the "new version" tray notification once per [versionName] so the
   /// 5-minute periodic check never spams the shade.
   Future<void> _notifyNewVersion(String versionName) async {
+    // Foreground: the update dialog already interrupts the user.
+    if (WidgetsBinding.instance.lifecycleState ==
+        AppLifecycleState.resumed) {
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getString('update_notified_version') == versionName) return;

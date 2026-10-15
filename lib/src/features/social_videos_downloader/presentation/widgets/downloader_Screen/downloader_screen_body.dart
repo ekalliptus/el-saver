@@ -126,8 +126,12 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
   }
 
   void _scheduleBannerRetry() {
-    if (_bannerAttempts >= _bannerRetryDelays.length) return;
-    final delay = _bannerRetryDelays[_bannerAttempts++];
+    // After the fast backoff ladder is exhausted, keep trying slowly
+    // forever: with AdMob limited serving, no-fill can outlast the ~9min
+    // ladder and a permanently empty banner slot reads as "broken app".
+    final delay = _bannerAttempts < _bannerRetryDelays.length
+        ? _bannerRetryDelays[_bannerAttempts++]
+        : const Duration(minutes: 5);
     _bannerRetryTimer?.cancel();
     _bannerRetryTimer = Timer(delay, () {
       // Premium may have activated or the screen died while we waited.
