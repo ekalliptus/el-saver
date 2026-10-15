@@ -9,6 +9,7 @@ import 'package:el_saver/src/core/utils/app_strings.dart';
 import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/services/permission_service.dart';
 import 'package:el_saver/src/core/services/update_service.dart';
+import 'package:el_saver/src/core/services/app_open_ad_service.dart';
 import 'package:el_saver/src/core/widgets/update_dialog.dart';
 import 'package:el_saver/src/core/providers/language_provider.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/bloc/downloader_bloc/downloader_bloc.dart';
@@ -33,6 +34,9 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _updateService = sl<UpdateService>();
+    // Cold-start app-open ad; shows after home settles, premium-skipped.
+    AppOpenAdService.instance.initialize();
+    AppOpenAdService.instance.maybeShowOnLaunch();
 
     // Init + start update checks after app is ready
     Future.delayed(const Duration(seconds: 5), () async {

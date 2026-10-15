@@ -100,15 +100,21 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
     }
   }
 
-  void _loadBannerAd() {
+  Future<void> _loadBannerAd() async {
     // Test ad unit in debug builds: production traffic against the live unit
     // risks AdMob invalid-traffic flags.
     final adUnitId = kDebugMode
         ? 'ca-app-pub-3940256099942544/6300978111'
         : 'ca-app-pub-9374589831001594/4903129775';
+    // Adaptive banner: fills the width, taller & better-paying than the
+    // fixed 320x50; anchored at the bottom like before. Size resolution is
+    // async (returns null offline) — fall back to the classic size.
+    final adaptiveSize =
+        await AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
+            MediaQuery.of(context).size.width.truncate());
     _bannerAd = BannerAd(
       adUnitId: adUnitId,
-      size: AdSize.banner,
+      size: adaptiveSize ?? AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (_) {

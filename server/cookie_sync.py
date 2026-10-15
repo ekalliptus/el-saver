@@ -305,9 +305,9 @@ _DEVICE_RE = re.compile(r"^[a-f0-9]{8,64}$")
 
 # Purchase packages. days=null => perpetual.
 PREMIUM_PACKAGES = {
-    "monthly": {"name": "Premium 1 Bulan", "price": 5000, "days": 30},
-    "yearly": {"name": "Premium 1 Tahun", "price": 15000, "days": 365},
-    "lifetime": {"name": "Premium Selamanya", "price": 25000, "days": None},
+    "monthly": {"name": "Premium 1 Bulan", "price": 6000, "days": 30},
+    "yearly": {"name": "Premium 1 Tahun", "price": 20000, "days": 365},
+    "lifetime": {"name": "Premium Selamanya", "price": 39000, "days": None},
 }
 
 # Manual payment instructions shown to the buyer (QRIS/DANA/WA contact).
