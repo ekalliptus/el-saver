@@ -217,7 +217,7 @@ def _restart_cobalt() -> bool:
 
 
 @app.post("/cookies")
-def set_cookies(payload: CookiePayload, request: Request, x_api_key: str = Header()):
+def set_cookies(payload: CookiePayload, request: Request, x_api_key: str | None = Header(None)):
     _check_key(x_api_key)
     _rate_limit(request, "cookies-write", 10, 60)
     if payload.platform not in VALID_PLATFORMS:
@@ -255,7 +255,7 @@ def set_cookies(payload: CookiePayload, request: Request, x_api_key: str = Heade
 
 
 @app.get("/cookies")
-def list_cookies(x_api_key: str = Header()):
+def list_cookies(x_api_key: str | None = Header(None)):
     _check_key(x_api_key)
     data = _read_cookies()
     result = {}
@@ -271,7 +271,7 @@ def list_cookies(x_api_key: str = Header()):
 
 
 @app.delete("/cookies/{platform}")
-def delete_cookies(platform: str, request: Request, x_api_key: str = Header()):
+def delete_cookies(platform: str, request: Request, x_api_key: str | None = Header(None)):
     _check_key(x_api_key)
     _rate_limit(request, "cookies-write", 10, 60)
     if platform not in VALID_PLATFORMS:
@@ -286,7 +286,7 @@ def delete_cookies(platform: str, request: Request, x_api_key: str = Header()):
 
 
 @app.post("/restart-cobalt")
-def restart_cobalt(x_api_key: str = Header()):
+def restart_cobalt(x_api_key: str | None = Header(None)):
     _check_key(x_api_key)
     restarted = _restart_cobalt()
     return {"status": "ok", "restarted": restarted}
@@ -373,7 +373,7 @@ class RedeemPayload(BaseModel):
 
 
 @app.post("/premium/redeem")
-def premium_redeem(payload: RedeemPayload, request: Request, x_api_key: str = Header()):
+def premium_redeem(payload: RedeemPayload, request: Request, x_api_key: str | None = Header(None)):
     _check_key(x_api_key)
     _rate_limit(request, "premium-redeem", 10, 60)
     key = payload.key.strip().upper()
@@ -434,7 +434,7 @@ class VerifyPayload(BaseModel):
 
 
 @app.post("/premium/verify")
-def premium_verify(payload: VerifyPayload, x_api_key: str = Header()):
+def premium_verify(payload: VerifyPayload, x_api_key: str | None = Header(None)):
     _check_key(x_api_key)
     device_id = payload.device_id.strip().lower()
     legacy_id = (payload.legacy_device_id or "").strip().lower()
@@ -565,7 +565,7 @@ def premium_packages():
 
 
 @app.post("/premium/order")
-def premium_order(payload: OrderPayload, request: Request, x_api_key: str = Header()):
+def premium_order(payload: OrderPayload, request: Request, x_api_key: str | None = Header(None)):
     _check_key(x_api_key)
     _rate_limit(request, "premium-order", 5, 60)
     device_id = payload.device_id.strip().lower()
@@ -628,7 +628,7 @@ def premium_order(payload: OrderPayload, request: Request, x_api_key: str = Head
 
 
 @app.get("/premium/order/{order_id}")
-def premium_order_status(order_id: str, x_api_key: str = Header()):
+def premium_order_status(order_id: str, x_api_key: str | None = Header(None)):
     _check_key(x_api_key)
     orders = _read_orders()
     order = orders.get(order_id)
@@ -661,7 +661,7 @@ class HistoryPayload(BaseModel):
 
 @app.post("/premium/orders/history")
 def premium_order_history(payload: HistoryPayload, request: Request,
-                          x_api_key: str = Header()):
+                          x_api_key: str | None = Header(None)):
     """Purchase history for one device — lets the app list past orders and
     resume a pending one after the user closed the app mid-payment."""
     _check_key(x_api_key)
@@ -715,7 +715,7 @@ class CancelOrderPayload(BaseModel):
 
 @app.post("/premium/order/cancel")
 def premium_order_cancel(payload: CancelOrderPayload, request: Request,
-                         x_api_key: str = Header()):
+                         x_api_key: str | None = Header(None)):
     """User-initiated cancellation of a pending order: frees the per-device
     pending cap slot and releases the reserved (unpaid) license."""
     _check_key(x_api_key)
