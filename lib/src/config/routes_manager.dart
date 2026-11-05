@@ -13,6 +13,8 @@ import '../features/social_videos_downloader/presentation/screens/downloader_scr
 import '../features/social_videos_downloader/presentation/screens/downloads_screen.dart';
 import '../features/social_videos_downloader/presentation/widgets/downloads_screen/view_video_screen.dart';
 import '../features/splash/splash_screen.dart';
+import '../features/onboarding/onboarding_screen.dart';
+import 'page_transitions.dart';
 import '../features/whatsapp_status/presentation/screens/whatsapp_status_screen.dart';
 
 import '../core/screens/permission_setup_screen.dart';
@@ -22,6 +24,7 @@ import '../core/services/premium_service.dart';
 
 class Routes {
   static const String splash = "/splash";
+  static const String onboarding = "/onboarding";
   static const String downloader = "/downloader";
   static const String downloads = "/downloads";
   static const String viewVideo = "/viewVideo";
@@ -40,6 +43,8 @@ class AppRounter {
         name: 'AppRouter');
 
     switch (setting.name) {
+      case Routes.onboarding:
+        return PageTransitions.slideUp(const OnboardingScreen(), setting);
       case Routes.splash:
         developer.log('✅ Creating SplashScreen route', name: 'AppRouter');
         return MaterialPageRoute(builder: (context) {
