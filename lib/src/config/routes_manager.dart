@@ -9,9 +9,9 @@ import '../features/cookie_auth/presentation/bloc/account_event.dart';
 import '../features/cookie_auth/presentation/screens/accounts_screen.dart';
 import '../features/cookie_auth/presentation/screens/legal_screen.dart';
 import '../features/cookie_auth/presentation/screens/webview_login_screen.dart';
-import '../features/social_videos_downloader/presentation/screens/downloader_screen.dart';
 import '../features/social_videos_downloader/presentation/screens/downloads_screen.dart';
 import '../features/social_videos_downloader/presentation/widgets/downloads_screen/view_video_screen.dart';
+import '../features/shell/main_shell_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import 'page_transitions.dart';
@@ -53,9 +53,9 @@ class AppRounter {
           return const SplashScreen();
         });
       case Routes.downloader:
-        developer.log('✅ Creating DownloaderScreen route', name: 'AppRouter');
+        developer.log('✅ Creating MainShellScreen route', name: 'AppRouter');
         return MaterialPageRoute(
-            builder: (context) => const DownloaderScreen());
+            builder: (context) => const MainShellScreen());
       case Routes.downloads:
         developer.log('✅ Creating DownloadsScreen route', name: 'AppRouter');
         return MaterialPageRoute(builder: (context) => const DownloadsScreen());
