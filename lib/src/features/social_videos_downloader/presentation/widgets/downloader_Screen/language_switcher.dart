@@ -113,31 +113,37 @@ class _LanguageSwitcherState extends State<LanguageSwitcher>
                     width: isSelected ? 2 : 1,
                   ),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      language.flag,
-                      style: TextStyle(
-                        fontSize: context.width * 0.08,
+                // scaleDown: on short screens flag+name exceed the fixed
+                // option height and would overflow — shrink to fit instead.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        language.flag,
+                        style: TextStyle(
+                          fontSize: context.width * 0.08,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: context.height * 0.005),
-                    Text(
-                      language.name,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: context.width * 0.025,
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.w400,
-                        color: isSelected
-                            ? AppColors.primaryColor
-                            : Colors.grey[600],
+                      SizedBox(height: context.height * 0.005),
+                      Text(
+                        language.name,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: context.width * 0.025,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.w400,
+                          color: isSelected
+                              ? AppColors.primaryColor
+                              : Colors.grey[600],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );

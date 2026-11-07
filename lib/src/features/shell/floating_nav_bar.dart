@@ -68,42 +68,50 @@ class FloatingNavBar extends StatelessWidget {
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(22),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Icon is ALWAYS visible; only its colour/size animate.
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOutCubic,
-                        child: Icon(
-                          item.icon,
-                          size: active ? 22 : 20,
-                          color: active
-                              ? AppColors.primaryColor
-                              : inactiveIcon,
+                  // scaleDown: on narrow screens icon+label exceed the
+                  // pill width (~62px per tab on 360dp) and would
+                  // overflow — the whole row shrinks to fit instead.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Icon is ALWAYS visible; only colour/size animate.
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOutCubic,
+                          child: Icon(
+                            item.icon,
+                            size: active ? 22 : 20,
+                            color: active
+                                ? AppColors.primaryColor
+                                : inactiveIcon,
+                          ),
                         ),
-                      ),
-                      // Label only occupies space when active, so the
-                      // pill grows around icon+text and icons never vanish.
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOutCubic,
-                        child: active
-                            ? Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 6),
-                                child: Text(
-                                  item.label,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.primaryColor,
+                        // Label only occupies space when active, so the
+                        // pill grows around icon+text and icons never vanish.
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOutCubic,
+                          child: active
+                              ? Padding(
+                                  padding:
+                                      const EdgeInsets.only(left: 6),
+                                  child: Text(
+                                    item.label,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primaryColor,
+                                    ),
                                   ),
-                                ),
-                              )
-                            : const SizedBox(width: 0),
-                      ),
-                    ],
+                                )
+                              : const SizedBox(width: 0),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
