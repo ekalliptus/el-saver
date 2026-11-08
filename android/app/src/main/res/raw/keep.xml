@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- flutter_local_notifications is passed the icon name as a Dart string,
+     invisible to the R8 resource shrinker — without keep it strips
+     @drawable/ic_stat_elsaver from release builds and every notification
+     fails with PlatformException(invalid_icon). -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_elsaver" />
