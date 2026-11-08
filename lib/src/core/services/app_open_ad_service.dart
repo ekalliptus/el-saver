@@ -7,9 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// Full-screen ad on app open / return-from-background. Google's own
-/// guidance: show at natural open transitions, skip when the user is
-/// mid-task (we skip if a download is active to avoid interrupting).
+/// Full-screen ad on app open / return-from-background. Shown at natural
+/// open transitions; capped by a short min-gap so rapid background/foreground
+/// cycles don't stack impressions back-to-back.
 class AppOpenAdService with WidgetsBindingObserver {
   AppOpenAdService._();
   static final AppOpenAdService instance = AppOpenAdService._();
@@ -23,7 +23,7 @@ class AppOpenAdService with WidgetsBindingObserver {
   // AdMob app-open creatives expire after 4 hours.
   static const _maxAge = Duration(hours: 4);
   // Never immediately re-show after the last dismissal.
-  static const _minGap = Duration(minutes: 3);
+  static const _minGap = Duration(minutes: 1);
   DateTime? _lastShownAt;
 
   bool get _enabled {

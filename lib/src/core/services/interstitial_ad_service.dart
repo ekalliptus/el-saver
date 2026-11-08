@@ -23,6 +23,9 @@ class InterstitialAdService {
 
   int _successCount = 0;
   int? _lastShownMs;
+  // Set when a due moment found no loaded ad; flushed as soon as one
+  // arrives (see _maybeFlushPendingDue) so the impression isn't lost.
+  int? _pendingDueMs;
   InterstitialAd? _loaded;
   // Retention-only: never read. Holds the on-screen ad strongly so GC
   // can't collect the Dart-side object mid-display.
@@ -108,7 +111,9 @@ class InterstitialAdService {
       await prefs.setInt(_prefsKey, _successCount);
     } catch (_) {}
 
-    const minInterval = Duration(minutes: 2);
+    // Aggressive free-tier monetization: one ad per download moment,
+    // throttled only by this gap (never stacks faster than 60s).
+    const minInterval = Duration(seconds: 60);
     final now = DateTime.now().millisecondsSinceEpoch;
     final lastOk = _lastShownMs == null ||
         now - _lastShownMs! >= minInterval.inMilliseconds;
@@ -118,12 +123,29 @@ class InterstitialAdService {
       await _show(now);
     }
     await _preload();
+    _maybeFlushPendingDue(now);
+  }
+
+  /// A due, interval-ok moment that found no loaded ad is remembered and
+  /// flushed as soon as the 30s preload timer delivers one — otherwise
+  /// every Nth action during a no-fill streak shows nothing at all.
+  void _maybeFlushPendingDue(int nowMs) {
+    if (_pendingDueMs == null) return;
+    if (_loaded == null) return;
+    final due = _pendingDueMs!;
+    _pendingDueMs = null;
+    if (nowMs - due > const Duration(minutes: 10).inMilliseconds) {
+      return; // stale: the moment passed long ago
+    }
+    // ignore: discarded_futures
+    _show(due);
   }
 
   Future<void> _show(int nowMs) async {
     final ad = _loaded;
     _loaded = null;
     if (ad == null) {
+      _pendingDueMs = nowMs;
       await _preload();
       return;
     }
