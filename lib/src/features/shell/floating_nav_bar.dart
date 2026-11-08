@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/utils/app_colors.dart';
+import '../../core/utils/app_strings.dart';
 
-/// Shown at the bottom of the main shell — the active tab gets a pill
-/// highlight with a label, the rest stay icon-only but always visible.
+/// Shown at the bottom of the main shell. Every tab has the same
+/// icon-over-label footprint so switching never reflows the bar; the
+/// active tab just gets a pill background and the primary colour.
 class FloatingNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -14,21 +16,22 @@ class FloatingNavBar extends StatelessWidget {
     required this.onTap,
   });
 
-  static const _items = [
-    (icon: Icons.home_rounded, label: 'Beranda'),
-    (icon: Icons.download_rounded, label: 'Unduhan'),
-    (icon: Icons.photo_library_rounded, label: 'Status'),
-    (icon: Icons.person_rounded, label: 'Akun'),
+  static const _icons = [
+    Icons.home_rounded,
+    Icons.download_rounded,
+    Icons.photo_library_rounded,
+    Icons.person_rounded,
   ];
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final inactiveIcon =
-        isDark ? Colors.white.withValues(alpha: 0.5) : Colors.black.withValues(alpha: 0.45);
+    final inactive = isDark
+        ? Colors.white.withValues(alpha: 0.5)
+        : Colors.black.withValues(alpha: 0.45);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Container(
         height: 64,
         decoration: BoxDecoration(
@@ -48,67 +51,57 @@ class FloatingNavBar extends StatelessWidget {
           ],
         ),
         child: Row(
-          children: List.generate(_items.length, (i) {
+          children: List.generate(_icons.length, (i) {
             final active = i == currentIndex;
-            final item = _items[i];
+            final label = [
+              AppStrings.tabHome,
+              AppStrings.downloads,
+              AppStrings.tabStatus,
+              AppStrings.tabAccounts,
+            ][i];
             return Expanded(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => onTap(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutCubic,
-                  height: 44,
-                  margin: const EdgeInsets.symmetric(
-                      vertical: 10, horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? AppColors.primaryColor
-                            .withValues(alpha: 0.22)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  // scaleDown: on narrow screens icon+label exceed the
-                  // pill width (~62px per tab on 360dp) and would
-                  // overflow — the whole row shrinks to fit instead.
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
+                child: Center(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: active
+                          ? AppColors.primaryColor.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Icon is ALWAYS visible; only colour/size animate.
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
                           curve: Curves.easeOutCubic,
                           child: Icon(
-                            item.icon,
+                            _icons[i],
                             size: active ? 22 : 20,
-                            color: active
-                                ? AppColors.primaryColor
-                                : inactiveIcon,
+                            color:
+                                active ? AppColors.primaryColor : inactive,
                           ),
                         ),
-                        // Label only occupies space when active, so the
-                        // pill grows around icon+text and icons never vanish.
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOutCubic,
-                          child: active
-                              ? Padding(
-                                  padding:
-                                      const EdgeInsets.only(left: 6),
-                                  child: Text(
-                                    item.label,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.primaryColor,
-                                    ),
-                                  ),
-                                )
-                              : const SizedBox(width: 0),
+                        const SizedBox(height: 2),
+                        Text(
+                          label,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: active
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color:
+                                active ? AppColors.primaryColor : inactive,
+                          ),
                         ),
                       ],
                     ),

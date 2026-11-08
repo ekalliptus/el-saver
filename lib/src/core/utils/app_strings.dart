@@ -1643,4 +1643,31 @@ class AppStrings {
         return "EL-Saver v$version is ready to install. Tap to open.";
     }
   }
+
+  static String get tabHome {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Beranda";
+      case SupportedLanguage.english:
+        return "Home";
+    }
+  }
+
+  static String get tabStatus {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Status";
+      case SupportedLanguage.english:
+        return "Status";
+    }
+  }
+
+  static String get tabAccounts {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Akun";
+      case SupportedLanguage.english:
+        return "Accounts";
+    }
+  }
 }

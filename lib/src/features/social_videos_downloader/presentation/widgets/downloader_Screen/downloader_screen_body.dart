@@ -425,8 +425,11 @@ class _PremiumButton extends StatelessWidget {
     if (isPremium) {
       return Tooltip(
         message: AppStrings.premiumActive,
-        child: Icon(Icons.verified_rounded,
-            color: AppColors.green, size: 26),
+        child: IconButton(
+          onPressed: onPressed,
+          icon: const Icon(Icons.verified_rounded,
+              color: AppColors.green, size: 26),
+        ),
       );
     }
     return Tooltip(
