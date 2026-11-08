@@ -7,8 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:el_saver/src/container_injector.dart' show sl;
 import 'package:el_saver/src/core/media_query.dart';
+import 'package:el_saver/src/core/services/interstitial_ad_service.dart';
 import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/widgets/premium_dialog.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/widgets/downloader_Screen/downloader_screen_supported_platforms.dart';
@@ -55,6 +57,71 @@ class _DownloaderScreenBodyState extends State<DownloaderScreenBody> {
   void initState() {
     super.initState();
     if (!sl<PremiumService>().isPremium) _loadBannerAd();
+    // A: right after an interstitial closes = peak-annoyance moment. Show
+    // the premium pitch sheet (throttled; skips premium & failed opens).
+    InterstitialAdService.instance.onAdWatched = _showPremiumPitch;
+  }
+
+  void _showPremiumPitch() {
+    if (!mounted) return;
+    if (sl<PremiumService>().isPremium) return;
+    unawaited(() async {
+      // Throttle: at most once per 12h across sessions.
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final throttle = const Duration(hours: 12).inMilliseconds;
+      final last = prefs.getInt('premium_pitch_last') ?? 0;
+      if (now - last < throttle) return;
+      await prefs.setInt('premium_pitch_last', now);
+      if (!mounted) return;
+      await showModalBottomSheet(
+        context: context,
+        isDismissible: true,
+        enableDrag: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.workspace_premium,
+                      color: AppColors.primaryColor, size: 28),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      AppStrings.pitchTitle,
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Text(AppStrings.pitchBody,
+                    style: const TextStyle(fontSize: 14, height: 1.4)),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      Navigator.of(context)
+                          .pushNamed(Routes.premiumPurchase);
+                    },
+                    icon: const Icon(Icons.flash_on, size: 18),
+                    label: Text(AppStrings.pitchCta),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }());
   }
 
   Future<void> _showLoginRequired(

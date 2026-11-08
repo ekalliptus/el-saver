@@ -21,6 +21,7 @@ class PremiumService {
 
   static const _redeemUrl = '${ApiConfig.cookieSyncUrl}/premium/redeem';
   static const _verifyUrl = '${ApiConfig.cookieSyncUrl}/premium/verify';
+  static const _trialUrl = '${ApiConfig.cookieSyncUrl}/premium/trial';
   static const _packagesUrl = '${ApiConfig.cookieSyncUrl}/premium/packages';
   static const _orderUrl = '${ApiConfig.cookieSyncUrl}/premium/order';
   static const _historyUrl = '${ApiConfig.cookieSyncUrl}/premium/orders/history';
@@ -237,6 +238,35 @@ class PremiumService {
     } catch (e) {
       return 'Terjadi kesalahan. Coba lagi.';
     }
+  }
+
+  /// Claims the one-time 3-day free trial for this device. Returns true
+  /// when the device is premium afterwards (trial just granted & saved).
+  Future<bool> startTrial() async {
+    _deviceId ??= await _resolveDeviceId();
+    if (_deviceId == null) return false;
+    try {
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+      ));
+      final response = await dio.post(
+        _trialUrl,
+        options: Options(headers: {'X-Api-Key': ApiConfig.backendApiKey}),
+        data: {
+          'device_id': _deviceId,
+          if (_legacyDeviceId != null) 'legacy_device_id': _legacyDeviceId,
+        },
+      );
+      final key = response.data is Map ? response.data['trial_key'] : null;
+      if (key is String && key.isNotEmpty) {
+        await _storage.write(key: _licenseStorageKey, value: key);
+        _licenseKey = key;
+        _isPremium = true;
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   /// Re-checks the entitlement against the server (revocation support).

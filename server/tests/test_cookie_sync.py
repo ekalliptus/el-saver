@@ -550,6 +550,76 @@ class WebhookTimestampTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 403)
 
 
+class FreeTrialTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        patcher = unittest.mock.patch.multiple(
+            cookie_sync,
+            PREMIUM_FILE=Path(self._tmp.name) / "lic.json",
+            ORDER_FILE=Path(self._tmp.name) / "orders.json",
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+        self.addCleanup(cookie_sync._rate_hits.clear)
+
+    def _trial(self, device: str, legacy: str | None = None):
+        cookie_sync._rate_hits.clear()
+        return cookie_sync.premium_trial(
+            cookie_sync.TrialPayload(device_id=device, legacy_device_id=legacy),
+            _req(f"10.{hash(device) % 200}.{len(device)}.1"),
+            cookie_sync.API_KEY,
+        )
+
+    def test_trial_grants_then_is_idempotent(self):
+        device = "d" * 16
+        first = self._trial(device)
+        self.assertEqual(first["status"], "active")
+        licenses = cookie_sync._read_licenses()
+        self.assertEqual(len(licenses), 1)
+        entry = next(iter(licenses.values()))
+        self.assertEqual(entry["tag"], "trial")
+        self.assertEqual(entry["device_id"], device)
+
+        # Second call returns the same trial — never stacks.
+        second = self._trial(device)
+        self.assertEqual(second["trial_key"], first["trial_key"])
+        self.assertEqual(len(cookie_sync._read_licenses()), 1)
+
+    def test_trial_rebinds_legacy_held_trial(self):
+        legacy = "a" * 16
+        current = "b" * 16
+        first = self._trial(legacy)
+        second = self._trial(current, legacy=legacy)
+        self.assertEqual(second["trial_key"], first["trial_key"])
+        self.assertEqual(
+            cookie_sync._read_licenses()[first["trial_key"]]["device_id"],
+            current,
+        )
+
+    def test_trial_expires_then_device_is_not_premium(self):
+        device = "e" * 16
+        response = self._trial(device)
+        key = response["trial_key"]
+        self.assertEqual(response["status"], "active")
+        with patch.object(cookie_sync, "_now_utc",
+                          return_value=cookie_sync._now_utc() + timedelta(days=4)):
+            self.assertEqual(cookie_sync._license_status(
+                cookie_sync._read_licenses()[key]), "expired")
+            verified = cookie_sync.premium_verify(
+                cookie_sync.VerifyPayload(device_id=device), cookie_sync.API_KEY,
+            )
+            self.assertEqual(verified["premium"], False)
+
+    def test_trial_device_counts_as_premium_in_verify(self):
+        device = "f" * 16
+        self._trial(device)
+        verified = cookie_sync.premium_verify(
+            cookie_sync.VerifyPayload(device_id=device), cookie_sync.API_KEY,
+        )
+        self.assertEqual(verified["premium"], True)
+
+
 class LegacyDeviceMigrationTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

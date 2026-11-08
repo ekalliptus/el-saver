@@ -48,7 +48,94 @@ class _MyAppState extends State<MyApp> {
       _updateSub = _updateService.updateStream.listen((info) {
         if (mounted && !_dialogShowing) _showUpdateDialog(info);
       });
+      // E: periodic premium promo — every 3 days, never overlaps dialogs.
+      await _maybeShowPremiumPromo();
     });
+  }
+
+  /// E: promotion sheet for non-premium users, at most once per 3 days.
+  /// Runs after everything else so it never fights the permission nudge,
+  /// premium verify or the update dialog.
+  Future<void> _maybeShowPremiumPromo() async {
+    try {
+      if (sl<PremiumService>().isPremium) return;
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final interval = const Duration(days: 3).inMilliseconds;
+      final last = prefs.getInt('premium_promo_last') ?? 0;
+      if (now - last < interval) return;
+      final ctx = navigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted || _dialogShowing) return;
+      await prefs.setInt('premium_promo_last', now);
+      await showModalBottomSheet<bool>(
+        // ignore: use_build_context_synchronously
+        context: ctx,
+        isDismissible: true,
+        enableDrag: true,
+        useRootNavigator: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.workspace_premium,
+                      color: AppColors.primaryColor, size: 30),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(AppStrings.promoTitle,
+                        style: const TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w700)),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Text(AppStrings.promoBody,
+                    style: const TextStyle(fontSize: 14, height: 1.4)),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+                      final activated =
+                          await sl<PremiumService>().startTrial();
+                      if (activated) {
+                        final toastCtx = navigatorKey.currentContext;
+                        if (toastCtx != null && toastCtx.mounted) {
+                          ScaffoldMessenger.of(toastCtx).showSnackBar(
+                            const SnackBar(
+                              content:
+                                  Text('Trial 3 hari aktif — iklan hilang!'),
+                              backgroundColor: AppColors.green,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.flash_on, size: 18),
+                    label: Text(AppStrings.promoCta),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Nanti'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (_) {
+      // Promo is best-effort; never block startup.
+    }
   }
 
   /// Re-offer permission activation to users who upgraded from older

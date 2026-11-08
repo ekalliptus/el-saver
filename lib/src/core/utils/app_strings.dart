@@ -1670,4 +1670,58 @@ class AppStrings {
         return "Accounts";
     }
   }
+
+  static String get pitchTitle {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Kepoin iklan tadi?";
+      case SupportedLanguage.english:
+        return "Tired of those ads?";
+    }
+  }
+
+  static String get pitchBody {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Premium mulai Rp1.700/hari — semua iklan hilang, download tanpa gangguan. Bisa dicoba gratis dulu kok.";
+      case SupportedLanguage.english:
+        return "Premium from Rp1,700/day — every ad disappears, downloads without interruption. Free trial available.";
+    }
+  }
+
+  static String get pitchCta {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Coba Gratis / Lihat Premium";
+      case SupportedLanguage.english:
+        return "Try Free / See Premium";
+    }
+  }
+
+  static String get promoTitle {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Coba Premium Gratis 3 Hari";
+      case SupportedLanguage.english:
+        return "Try Premium Free for 3 Days";
+    }
+  }
+
+  static String get promoBody {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Tanpa iklan, download tanpa gangguan, langsung aktif sekali tap. Tanpa pembayaran — habis 3 hari kembali normal.";
+      case SupportedLanguage.english:
+        return "Ad-free, uninterrupted downloads, active with one tap. No payment needed — back to normal after 3 days.";
+    }
+  }
+
+  static String get promoCta {
+    switch (_currentLanguage) {
+      case SupportedLanguage.indonesian:
+        return "Aktifkan Trial Gratis";
+      case SupportedLanguage.english:
+        return "Activate Free Trial";
+    }
+  }
 }

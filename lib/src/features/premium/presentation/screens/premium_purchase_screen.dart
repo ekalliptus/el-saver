@@ -298,33 +298,14 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
           ),
         ),
         const SizedBox(height: 8),
+        // B: value framing — yearly gets the "Terpopuler" badge + per-day
+        // math; monthly shows its Rp/day cost so yearly clearly wins.
         for (final pkg in packages)
-          Card(
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 8),
-              leading: Icon(
-                pkg.days == null
-                    ? Icons.all_inclusive
-                    : Icons.calendar_month,
-                color: AppColors.primaryColor,
-                size: 32,
-              ),
-              title: Text(pkg.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(
-                pkg.days == null
-                    ? AppStrings.activeForeverOnDevice
-                    : AppStrings.activeDaysOnDevice(pkg.days!),
-              ),
-              trailing: FilledButton(
-                onPressed: _creating ? null : () => _buy(pkg),
-                child: _creating
-                    ? const FancyLoader(size: 14, color: Colors.white)
-                    : Text(formatRupiah(pkg.price)),
-              ),
-            ),
+          _PackageCard(
+            pkg: pkg,
+            isPopular: pkg.id == 'yearly',
+            creating: _creating,
+            onBuy: _buy,
           ),
       ],
     );
@@ -445,5 +426,132 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
         ),
       ],
     );
+  }
+}
+
+/// B: package card with value framing — "Terpopuler" badge on yearly,
+/// Rp/day equivalence on every card so the yearly deal sells itself.
+class _PackageCard extends StatelessWidget {
+  final PremiumPackage pkg;
+  final bool isPopular;
+  final bool creating;
+  final void Function(PremiumPackage) onBuy;
+
+  const _PackageCard({
+    required this.pkg,
+    required this.isPopular,
+    required this.creating,
+    required this.onBuy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final border = isPopular
+        ? AppColors.primaryColor
+        : Theme.of(context).dividerColor;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+            color: border, width: isPopular ? 2 : 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  pkg.days == null
+                      ? Icons.all_inclusive
+                      : Icons.calendar_month,
+                  color: AppColors.primaryColor,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(pkg.name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 15)),
+                ),
+                if (isPopular)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryColor,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'TERPOPULER',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              pkg.days == null
+                  ? AppStrings.activeForeverOnDevice
+                  : AppStrings.activeDaysOnDevice(pkg.days!),
+              style: TextStyle(
+                  fontSize: 12, color: Theme.of(context).hintColor),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        formatRupiah(pkg.price),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 18),
+                      ),
+                      Text(
+                        _perDayLabel(),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: isPopular
+                                ? AppColors.primaryColor
+                                : Theme.of(context).hintColor,
+                            fontWeight: isPopular
+                                ? FontWeight.w600
+                                : FontWeight.w400),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton(
+                  onPressed: creating ? null : () => onBuy(pkg),
+                  child: creating
+                      ? const FancyLoader(size: 14, color: Colors.white)
+                      : const Text('Pilih'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _perDayLabel() {
+    final days = pkg.days;
+    if (days == null) {
+      return 'Sekali bayar — aktif permanen';
+    }
+    final perDay = pkg.price / days;
+    if (perDay < 10) {
+      return '≈ Rp${perDay.toStringAsFixed(1)}/hari';
+    }
+    return '≈ Rp${perDay.round()}/hari';
   }
 }

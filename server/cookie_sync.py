@@ -462,6 +462,70 @@ def premium_verify(payload: VerifyPayload, x_api_key: str | None = Header(None))
     return {"premium": premium}
 
 
+# --- Free trial (C): one 3-day license per device, no payment -------------
+
+TRIAL_DAYS = 3
+TRIAL_TAG = "trial"
+
+
+class TrialPayload(BaseModel):
+    device_id: str
+    legacy_device_id: str | None = None
+
+
+@app.post("/premium/trial")
+def premium_trial(payload: TrialPayload, request: Request, x_api_key: str | None = Header(None)):
+    """Grants a one-time 3-day trial license to a device. Idempotent per
+    device (including legacy rebinding); re-calling returns the same
+    trial's state instead of stacking new trials."""
+    _check_key(x_api_key)
+    _rate_limit(request, "premium-trial", 5, 300)
+    device_id = payload.device_id.strip().lower()
+    legacy_id = (payload.legacy_device_id or "").strip().lower()
+    if not _DEVICE_RE.match(device_id):
+        raise HTTPException(400, "device_id tidak valid")
+    if legacy_id and not _DEVICE_RE.match(legacy_id):
+        legacy_id = ""
+
+    with _json_lock:
+        licenses = _read_licenses()
+
+        # Existing trial for this device (current or legacy id)?
+        trial_key = None
+        for key, entry in licenses.items():
+            if entry.get("tag") == TRIAL_TAG and (
+                entry.get("device_id") == device_id
+                or (legacy_id and entry.get("device_id") == legacy_id)
+            ):
+                trial_key = key
+                break
+
+        if trial_key is None:
+            trial_key = _generate_license(licenses)
+            licenses[trial_key] = {
+                "device_id": device_id,
+                "redeemed_at": _now_utc().isoformat(),
+                "expires_at": (
+                    _now_utc().replace(microsecond=0)
+                    + timedelta(days=TRIAL_DAYS)
+                ).isoformat(),
+                "tag": TRIAL_TAG,
+                "source": "trial",
+            }
+            _write_licenses(licenses)
+        elif licenses[trial_key].get("device_id") != device_id:
+            # Rebind legacy-held trial to the current id (app update path).
+            licenses[trial_key]["device_id"] = device_id
+            _write_licenses(licenses)
+
+        entry = licenses[trial_key]
+        return {
+            "trial_key": trial_key,
+            "status": _license_status(entry),
+            "expires_at": entry.get("expires_at"),
+        }
+
+
 # --- Purchase flow (auto-generated licenses, no manual key input) ----------
 
 

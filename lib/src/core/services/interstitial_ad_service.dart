@@ -141,6 +141,10 @@ class InterstitialAdService {
     _show(due);
   }
 
+  /// Optional hook fired right after an interstitial is dismissed — the
+  /// caller surfaces the premium pitch at the peak-annoyance moment.
+  void Function()? onAdWatched;
+
   Future<void> _show(int nowMs) async {
     final ad = _loaded;
     _loaded = null;
@@ -168,7 +172,12 @@ class InterstitialAdService {
     }
 
     ad.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: finish,
+      // Ad watched = peak annoyance moment: hand the caller the hook that
+      // surfaces the premium pitch right after dismissal (A: paywall CTA).
+      onAdDismissedFullScreenContent: (ad) {
+        finish(ad);
+        onAdWatched?.call();
+      },
       onAdFailedToShowFullScreenContent: (ad, _) => finish(ad),
     );
     _lastShownMs = nowMs;

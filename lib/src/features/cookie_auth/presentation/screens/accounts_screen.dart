@@ -16,6 +16,8 @@ import '../bloc/account_bloc.dart';
 import '../bloc/account_event.dart';
 import '../bloc/account_state.dart';
 import '../../../../core/common_widgets/fancy_loader.dart';
+import '../../../../core/services/premium_service.dart';
+import '../../../../core/widgets/premium_dialog.dart';
 
 class AccountsScreen extends StatelessWidget {
   const AccountsScreen({super.key});
@@ -97,6 +99,50 @@ class AccountsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
+              // Premium entry (D): the only always-visible surface outside
+              // the downloader's crown icon — picks up users who never tap it.
+              Builder(builder: (context) {
+                final isPremium = sl<PremiumService>().isPremium;
+                return Card(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    color: isPremium
+                        ? cardColor
+                        : AppColors.primaryColor.withValues(alpha: 0.08),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: borderColor),
+                    ),
+                    child: ListTile(
+                      onTap: () => showPremiumDialog(
+                        context,
+                        premium: sl<PremiumService>(),
+                        isPremium: isPremium,
+                      ),
+                      leading: Icon(
+                        isPremium
+                            ? Icons.verified_rounded
+                            : Icons.workspace_premium,
+                        color: isPremium
+                            ? AppColors.green
+                            : AppColors.primaryColor,
+                        size: 28,
+                      ),
+                      title: Text(
+                        isPremium
+                            ? AppStrings.premiumActive
+                            : AppStrings.buyPremiumNoAds,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        isPremium
+                            ? 'Iklan dinonaktifkan di perangkat ini'
+                            : 'Mulai dari Rp1.700/hari',
+                        style: TextStyle(color: mutedColor, fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                    ),
+                  );
+              }),
               ...PlatformLoginConfig.supported.map((config) {
                 final cookie = cookies
                     .where((c) => c.platform == config.platform)
