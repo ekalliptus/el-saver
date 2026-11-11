@@ -252,6 +252,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         );
 
       case _Phase.error:
+        final hasApk = _apkPath != null && File(_apkPath!).existsSync();
         return Column(
           children: [
             const SizedBox(height: 8),
@@ -259,7 +260,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => setState(() => _phase = _Phase.info),
+                    onPressed: () {
+                      if (hasApk) {
+                        _openSystemInstaller();
+                      } else {
+                        setState(() => _phase = _Phase.info);
+                      }
+                    },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.primaryColor,
                       side: BorderSide(
@@ -267,17 +274,19 @@ class _UpdateDialogState extends State<UpdateDialog> {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
-                    child: Text(AppStrings.tryAgain),
+                    child: Text(hasApk ? AppStrings.reopenInstaller : AppStrings.tryAgain),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextButton(
-                    onPressed: _openSystemInstaller,
-                    child: Text(AppStrings.installManually,
-                        style: TextStyle(color: mutedColor)),
+                if (!hasApk) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => setState(() => _phase = _Phase.info),
+                      child: Text(AppStrings.installManually,
+                          style: TextStyle(color: mutedColor)),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 8),

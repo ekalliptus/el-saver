@@ -32,16 +32,40 @@ bool isNewerVersionName(String remote, String local) {
   return false;
 }
 
-/// Map an Android ABI to the split-per-abi release APK filename.
-String abiApkFileName(List<String> supportedAbis) {
-  // Priority: arm64 > armv7 > x86_64 (matches `flutter build --split-per-abi`)
-  if (supportedAbis.contains('arm64-v8a')) return 'app-arm64-v8a-release.apk';
-  if (supportedAbis.contains('armeabi-v7a')) {
-    return 'app-armeabi-v7a-release.apk';
+/// Map an Android ABI to candidate release APK filenames.
+/// Supports both legacy gradle names (`app-arm64-v8a-release.apk`)
+/// and modern release asset names (`el-saver-vX.Y.Z-arm64.apk`).
+List<String> candidateApkFileNames(List<String> supportedAbis, [String? versionName]) {
+  final cleanVersion = versionName?.replaceAll(RegExp(r'[^0-9.]'), '') ?? '';
+  final hasVer = cleanVersion.isNotEmpty;
+  
+  if (supportedAbis.contains('arm64-v8a')) {
+    return [
+      if (hasVer) 'el-saver-v$cleanVersion-arm64.apk',
+      'app-arm64-v8a-release.apk',
+    ];
   }
-  if (supportedAbis.contains('x86_64')) return 'app-x86_64-release.apk';
-  // Unknown ABI: fall back to arm64 (most common modern default)
-  return 'app-arm64-v8a-release.apk';
+  if (supportedAbis.contains('armeabi-v7a')) {
+    return [
+      if (hasVer) 'el-saver-v$cleanVersion-armeabi-v7a.apk',
+      'app-armeabi-v7a-release.apk',
+    ];
+  }
+  if (supportedAbis.contains('x86_64')) {
+    return [
+      if (hasVer) 'el-saver-v$cleanVersion-x86_64.apk',
+      'app-x86_64-release.apk',
+    ];
+  }
+  return [
+    if (hasVer) 'el-saver-v$cleanVersion-arm64.apk',
+    'app-arm64-v8a-release.apk',
+  ];
+}
+
+/// Kept for backward compatibility with existing tests/callers.
+String abiApkFileName(List<String> supportedAbis) {
+  return candidateApkFileNames(supportedAbis).last;
 }
 
 class UpdateService {
@@ -142,7 +166,8 @@ class UpdateService {
           isNewerVersionName(latestVersionName, packageInfo.version);
 
       // Resolve the right APK for this device's ABI.
-      final downloadUrl = await _resolveDownloadUrl(downloadUrlBase, legacyUrl);
+      final downloadUrl = await _resolveDownloadUrl(
+          downloadUrlBase, legacyUrl, latestVersionName);
 
       if (isNewer && downloadUrl.isNotEmpty) {
         final info = UpdateInfo(
@@ -185,8 +210,9 @@ class UpdateService {
   }
 
   /// Build the download URL for this device's ABI. Prefers [base] +
-  /// per-abi filename; falls back to [legacy] single URL when base is empty.
-  Future<String> _resolveDownloadUrl(String base, String legacy) async {
+  /// candidate filenames; falls back to [legacy] single URL when base is empty.
+  Future<String> _resolveDownloadUrl(
+      String base, String legacy, [String? versionName]) async {
     if (base.isEmpty) return legacy;
     List<String> abis = const [];
     try {
@@ -196,10 +222,36 @@ class UpdateService {
     } catch (e) {
       developer.log('ABI detection failed: $e', name: 'UpdateService');
     }
-    final file = abiApkFileName(abis);
     final trimmed =
         base.endsWith('/') ? base.substring(0, base.length - 1) : base;
-    return '$trimmed/$file';
+    final candidates = candidateApkFileNames(abis, versionName);
+    final dio = Dio(BaseOptions(
+      followRedirects: true,
+      maxRedirects: 5,
+      connectTimeout: const Duration(seconds: 5),
+      receiveTimeout: const Duration(seconds: 5),
+    ));
+
+    // Probe candidate URLs (new asset naming vs old gradle naming)
+    for (final filename in candidates) {
+      final candidateUrl = '$trimmed/$filename';
+      try {
+        final res = await dio.head(
+          candidateUrl,
+          options: Options(headers: {
+            "User-Agent": "ELSaver/1.0",
+          }),
+        );
+        if (res.statusCode == 200) {
+          return candidateUrl;
+        }
+      } catch (_) {
+        // Try next candidate
+      }
+    }
+
+    // Default to the first candidate if head checks fail or offline
+    return '$trimmed/${candidates.first}';
   }
 
   Future<String?> downloadUpdate(String url,

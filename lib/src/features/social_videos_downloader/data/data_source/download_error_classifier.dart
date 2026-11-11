@@ -36,7 +36,10 @@ class DownloadErrorClassifier {
       message.contains('registered users') ||
       message.contains('login page') ||
       message.contains('private account') ||
-      message.contains('requires authentication');
+      message.contains('requires authentication') ||
+      message.contains('429: too many requests') ||
+      message.contains('error.api.fetch.empty') ||
+      message.contains('cannot access content');
 
   static String _name(SocialPlatform platform) =>
       DownloadItem.platformNameOf(platform);

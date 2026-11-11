@@ -102,7 +102,8 @@ class AccountsScreen extends StatelessWidget {
               // Premium entry (D): the only always-visible surface outside
               // the downloader's crown icon — picks up users who never tap it.
               Builder(builder: (context) {
-                final isPremium = sl<PremiumService>().isPremium;
+                final isPremium = sl.isRegistered<PremiumService>() &&
+                    sl<PremiumService>().isPremium;
                 return Card(
                     margin: const EdgeInsets.only(bottom: 20),
                     color: isPremium
@@ -113,11 +114,15 @@ class AccountsScreen extends StatelessWidget {
                       side: BorderSide(color: borderColor),
                     ),
                     child: ListTile(
-                      onTap: () => showPremiumDialog(
-                        context,
-                        premium: sl<PremiumService>(),
-                        isPremium: isPremium,
-                      ),
+                      onTap: () {
+                        if (sl.isRegistered<PremiumService>()) {
+                          showPremiumDialog(
+                            context,
+                            premium: sl<PremiumService>(),
+                            isPremium: isPremium,
+                          );
+                        }
+                      },
                       leading: Icon(
                         isPremium
                             ? Icons.verified_rounded

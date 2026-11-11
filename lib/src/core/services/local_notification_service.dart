@@ -17,13 +17,6 @@ class LocalNotificationService {
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
-  /// Tray notifications are for when the user is NOT looking at the app.
-  /// In the foreground the UI already shows a toast/dialog for the same
-  /// event — posting both is double-reporting.
-  bool get _userCanSeeApp =>
-      WidgetsBinding.instance.lifecycleState == null ||
-      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-
   Future<void> initialize() async {
     if (_initialized) return;
     try {
@@ -95,7 +88,6 @@ class LocalNotificationService {
 
   /// Replaces the progress entry with a self-dismissing completion notice.
   Future<void> downloadCompleted(String key, String title) async {
-    if (!_userCanSeeApp) return;
     await _show(
       key,
       AppStrings.notifDownloadComplete,
@@ -115,7 +107,6 @@ class LocalNotificationService {
   }
 
   Future<void> downloadFailed(String key, String title, String reason) async {
-    if (!_userCanSeeApp) return;
     await _show(
       key,
       AppStrings.notifDownloadFailed,

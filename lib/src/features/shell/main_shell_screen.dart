@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:el_saver/src/config/routes_manager.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/screens/downloads_screen.dart';
@@ -20,6 +21,7 @@ class MainShellScreen extends StatefulWidget {
 
 class _MainShellScreenState extends State<MainShellScreen> {
   late int _current = widget.initialTab;
+  DateTime? _lastBackPressTime;
 
   static final List<Widget> _pages = [
     // Home downloader tab (shell owns the bottom nav).
@@ -30,13 +32,45 @@ class _MainShellScreenState extends State<MainShellScreen> {
     const _AccountsEmbed(),
   ];
 
+  void _onPopInvokedWithResult(bool didPop, dynamic result) {
+    if (didPop) return;
+
+    // 1) If not on Home tab, back press navigates to Home tab first
+    if (_current != 0) {
+      setState(() => _current = 0);
+      return;
+    }
+
+    // 2) If already on Home tab, require double back press within 2s to exit
+    final now = DateTime.now();
+    if (_lastBackPressTime == null ||
+        now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+      _lastBackPressTime = now;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tekan sekali lagi untuk keluar'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Double-press confirmed: exit application smoothly
+    SystemNavigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(index: _current, children: _pages),
-      bottomNavigationBar: FloatingNavBar(
-        currentIndex: _current,
-        onTap: (i) => setState(() => _current = i),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvokedWithResult,
+      child: Scaffold(
+        body: IndexedStack(index: _current, children: _pages),
+        bottomNavigationBar: FloatingNavBar(
+          currentIndex: _current,
+          onTap: (i) => setState(() => _current = i),
+        ),
       ),
     );
   }
