@@ -10,6 +10,7 @@ import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:el_saver/src/core/services/permission_service.dart';
 import 'package:el_saver/src/core/services/update_service.dart';
 import 'package:el_saver/src/core/services/app_open_ad_service.dart';
+import 'package:el_saver/src/core/services/app_readiness.dart';
 import 'package:el_saver/src/core/widgets/update_dialog.dart';
 import 'package:el_saver/src/core/providers/language_provider.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/bloc/downloader_bloc/downloader_bloc.dart';
@@ -34,23 +35,31 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _updateService = sl<UpdateService>();
-    // Cold-start app-open ad; shows after home settles, premium-skipped.
+    // App-open ads: preload now, but the cold-start SHOW moved to
+    // MainShellScreen so it never covers splash/onboarding/permission setup.
     AppOpenAdService.instance.initialize();
-    AppOpenAdService.instance.maybeShowOnLaunch();
 
-    // Init + start update checks after app is ready
-    Future.delayed(const Duration(seconds: 5), () async {
-      if (!mounted) return;
-      await _maybeNudgePermissions();
-      await sl<PremiumService>().verify();
-      await _updateService.initialize();
-      _updateService.startPeriodicCheck();
-      _updateSub = _updateService.updateStream.listen((info) {
-        if (mounted && !_dialogShowing) _showUpdateDialog(info);
-      });
-      // E: periodic premium promo — every 3 days, never overlaps dialogs.
-      await _maybeShowPremiumPromo();
+    // Everything below surfaces UI on its own schedule — the permission
+    // nudge, update dialogs and the premium promo. They must wait until
+    // the main shell is on screen (readiness gate), then settle a few
+    // seconds, so they never race the splash → onboarding → permission
+    // setup flow.
+    unawaited(_runPostSetupSequence());
+  }
+
+  Future<void> _runPostSetupSequence() async {
+    await AppReadiness.waitUntilReady();
+    await Future<void>.delayed(const Duration(seconds: 5));
+    if (!mounted) return;
+    await _maybeNudgePermissions();
+    await sl<PremiumService>().verify();
+    await _updateService.initialize();
+    _updateService.startPeriodicCheck();
+    _updateSub = _updateService.updateStream.listen((info) {
+      if (mounted && !_dialogShowing) _showUpdateDialog(info);
     });
+    // E: periodic premium promo — every 3 days, never overlaps dialogs.
+    await _maybeShowPremiumPromo();
   }
 
   /// E: promotion sheet for non-premium users, at most once per 3 days.
@@ -67,15 +76,17 @@ class _MyAppState extends State<MyApp> {
       final ctx = navigatorKey.currentContext;
       if (ctx == null || !ctx.mounted || _dialogShowing) return;
       await prefs.setInt('premium_promo_last', now);
-      await showModalBottomSheet<bool>(
-        // ignore: use_build_context_synchronously
-        context: ctx,
-        isDismissible: true,
-        enableDrag: true,
-        useRootNavigator: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
+      _dialogShowing = true;
+      try {
+        await showModalBottomSheet<bool>(
+          // ignore: use_build_context_synchronously
+          context: ctx,
+          isDismissible: true,
+          enableDrag: true,
+          useRootNavigator: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
         builder: (sheetContext) => SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
@@ -132,7 +143,10 @@ class _MyAppState extends State<MyApp> {
             ),
           ),
         ),
-      );
+        );
+      } finally {
+        _dialogShowing = false;
+      }
     } catch (_) {
       // Promo is best-effort; never block startup.
     }
@@ -144,6 +158,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> _maybeNudgePermissions() async {
     final permissionService = PermissionService();
     try {
+      if (_dialogShowing) return;
       if (!await permissionService.hasMissingCriticalPermissions()) return;
       final prefs = await SharedPreferences.getInstance();
       final lastNudge = prefs.getInt('perm_nudge_last') ?? 0;
@@ -152,6 +167,7 @@ class _MyAppState extends State<MyApp> {
       final ctx = navigatorKey.currentContext;
       if (ctx == null || !ctx.mounted) return;
 
+      _dialogShowing = true;
       final activate = await showDialog<bool>(
         context: ctx,
         builder: (dialogContext) => AlertDialog(
@@ -174,6 +190,7 @@ class _MyAppState extends State<MyApp> {
           ],
         ),
       );
+      _dialogShowing = false;
       await prefs.setInt(
           'perm_nudge_last', DateTime.now().millisecondsSinceEpoch);
       if (activate == true && ctx.mounted) {
@@ -181,6 +198,8 @@ class _MyAppState extends State<MyApp> {
       }
     } catch (_) {
       // Nudge is best-effort; never block startup.
+    } finally {
+      _dialogShowing = false;
     }
   }
 

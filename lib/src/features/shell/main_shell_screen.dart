@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:el_saver/src/config/routes_manager.dart';
+import 'package:el_saver/src/core/services/app_open_ad_service.dart';
+import 'package:el_saver/src/core/services/app_readiness.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/screens/downloads_screen.dart';
 import 'package:el_saver/src/features/social_videos_downloader/presentation/screens/downloader_screen.dart';
 import 'package:el_saver/src/features/whatsapp_status/presentation/screens/whatsapp_status_screen.dart';
@@ -31,6 +33,19 @@ class _MainShellScreenState extends State<MainShellScreen> {
     // Akun tab.
     const _AccountsEmbed(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Main shell on screen = all startup flows (splash, onboarding,
+    // permission setup) have settled. Opens the gate for startup popups
+    // (FCM / local notification permission prompts, nudges, promos) and
+    // fires the cold-start app-open ad here instead of at app launch.
+    AppReadiness.markReady();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppOpenAdService.instance.maybeShowOnLaunch();
+    });
+  }
 
   void _onPopInvokedWithResult(bool didPop, dynamic result) {
     if (didPop) return;

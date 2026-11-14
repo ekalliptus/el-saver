@@ -361,9 +361,7 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> {
 
         // Navigate to main app
         await Future.delayed(const Duration(seconds: 1));
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed(Routes.downloader);
-        }
+        _finishToMainApp();
 
         // No need for manual update checks here - MyApp.markPermissionSetupCompleted()
         // is called by PermissionService and will handle update checking automatically
@@ -393,9 +391,7 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> {
 
         // Still navigate to app but with limited functionality
         await Future.delayed(const Duration(seconds: 2));
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed(Routes.downloader);
-        }
+        _finishToMainApp();
 
         // No manual update check needed - handled by MyApp callback
       }
@@ -422,9 +418,7 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> {
 
       // Navigate anyway
       await Future.delayed(const Duration(seconds: 2));
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed(Routes.downloader);
-      }
+      _finishToMainApp();
 
       // No manual update check needed - handled by MyApp callback
     } finally {
@@ -433,6 +427,20 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  /// Leave setup to the main app. When this screen was opened on top of the
+  /// main shell (permission nudge flow), pop back — pushing `downloader`
+  /// again would stack a duplicate MainShellScreen. From the splash /
+  /// onboarding flow there is nothing below, so replace as before.
+  void _finishToMainApp() {
+    if (!mounted) return;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushReplacementNamed(Routes.downloader);
     }
   }
 

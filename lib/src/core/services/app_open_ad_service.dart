@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:el_saver/src/container_injector.dart';
+import 'package:el_saver/src/core/services/app_readiness.dart';
 import 'package:el_saver/src/core/services/premium_service.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
@@ -115,6 +116,10 @@ class AppOpenAdService with WidgetsBindingObserver {
   }
 
   Future<void> _show() async {
+    // Never cover the splash / onboarding / permission-setup flow — e.g. the
+    // resume event fired when the user returns from the system settings page
+    // mid-setup.
+    if (!AppReadiness.isReady) return;
     final ad = _loaded;
     if (ad == null || _showing) return;
     _showing = true;

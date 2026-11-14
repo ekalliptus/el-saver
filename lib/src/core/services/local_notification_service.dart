@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../utils/app_strings.dart';
+import 'app_readiness.dart';
 import 'package:flutter/widgets.dart';
 
 /// System-tray notifications for in-app events (download progress/complete,
@@ -19,6 +20,10 @@ class LocalNotificationService {
 
   Future<void> initialize() async {
     if (_initialized) return;
+    // The Android 13+ permission prompt must never appear over the splash /
+    // onboarding / permission-setup flow — wait for the main shell. Downloads
+    // (the only notification producers) also only start from the main shell.
+    await AppReadiness.waitUntilReady();
     try {
       await _plugin.initialize(
         const InitializationSettings(

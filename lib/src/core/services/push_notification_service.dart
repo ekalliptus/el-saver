@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import 'app_readiness.dart';
 import '../common_widgets/toast.dart';
 import '../utils/app_enums.dart';
 
@@ -28,6 +29,11 @@ class PushNotificationService {
     if (_initialized) return;
     try {
       final messaging = FirebaseMessaging.instance;
+
+      // The Android 13+ system permission dialog must never appear over the
+      // splash / onboarding / permission-setup flow — wait for the main
+      // shell (readiness gate) before asking.
+      await AppReadiness.waitUntilReady();
 
       // Android 13+ runtime permission (also granted via app settings flow).
       await messaging.requestPermission(alert: true, badge: true, sound: true);
